@@ -9,7 +9,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
@@ -133,14 +133,33 @@ def dashboard(request: Request):
 @app.get("/analyses", response_class=HTMLResponse)
 def analyses(request: Request):
     with SessionLocal() as session:
+        status_priority = case(
+            (AnalysisJob.status == "ANALYZING", 0),
+            (AnalysisJob.status == "QUEUED", 1),
+            (AnalysisJob.status == "FAILED", 2),
+            (AnalysisJob.status == "COMPLETED", 3),
+            else_=4,
+        )
+
         jobs = session.scalars(
-            select(AnalysisJob).order_by(AnalysisJob.id.desc())
+            select(AnalysisJob).order_by(
+                status_priority,
+                AnalysisJob.id.desc(),
+            )
         ).all()
+
+        has_active_jobs = any(
+            job.status in {"QUEUED", "ANALYZING"}
+            for job in jobs
+        )
 
         return templates.TemplateResponse(
             request=request,
             name="analyses.html",
-            context={"jobs": jobs},
+            context={
+                "jobs": jobs,
+                "has_active_jobs": has_active_jobs,
+            },
         )
 
 
