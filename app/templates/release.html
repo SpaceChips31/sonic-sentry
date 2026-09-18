@@ -23,15 +23,15 @@
         <strong>{{ release.total_tracks }}</strong>
     </article>
     <article class="stat pass">
-        <span>Passed</span>
+        <span>Automatic pass</span>
         <strong>{{ release.pass_tracks }}</strong>
     </article>
     <article class="stat quarantine">
-        <span>Review</span>
+        <span>Automatic review</span>
         <strong>{{ release.quarantine_tracks }}</strong>
     </article>
     <article class="stat rejected">
-        <span>Rejected</span>
+        <span>Automatic rejected</span>
         <strong>{{ release.rejected_tracks }}</strong>
     </article>
 </section>
@@ -50,10 +50,14 @@
         <tbody>
         {% for track in release.tracks %}
             <tr class="{% if track.status != 'PASS' %}attention{% endif %}">
-                <td>{{ track.display_path }}</td>
+                <td><a href="/tracks/{{ track.id }}">{{ track.display_path }}</a></td>
                 <td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td>
                 <td>{{ track.forensic_verdict or "—" }}</td>
-                <td>{{ track.human_review }}</td>
+                <td>
+                    <span class="review-state {{ track.human_review|lower }}">
+                        {{ track.human_review }}
+                    </span>
+                </td>
                 <td>
                     <span class="badge {{ track.status|lower }}">
                         {{ track.status }}

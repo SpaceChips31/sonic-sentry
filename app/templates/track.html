@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% macro help(text) %}
+<span class="help-tooltip" tabindex="0" aria-label="{{ text }}">
+    ?
+    <span class="help-tooltip-content" role="tooltip">{{ text }}</span>
+</span>
+{% endmacro %}
+
+{% block title %}{{ track.display_path }} · Lossless Validator{% endblock %}
+
+{% block content %}
+<a class="back" href="/releases/{{ track.release.id }}">← {{ track.release.title }}</a>
+
+<section class="release-header">
+    <div>
+        <p class="eyebrow">Forensic review</p>
+        <h1 class="track-title">{{ track.display_path }}</h1>
+        <p class="source-path">{{ track.path }}</p>
+    </div>
+
+    <span class="badge large {{ track.status|lower }}">
+        {{ track.status }}
+    </span>
+</section>
+
+<section class="stats">
+    <article class="stat">
+        <span>
+            Integrity
+            {{ help("Controlla che il FLAC non sia corrotto. PASS non certifica che la sorgente originale fosse realmente lossless.") }}
+        </span>
+        <strong class="{{ 'text-pass' if track.integrity_ok else 'text-rejected' }}">
+            {{ "PASS" if track.integrity_ok else "FAILED" }}
+        </strong>
+    </article>
+    <article class="stat quarantine">
+        <span>
+            Forensic verdict
+            {{ help("Valutazione automatica dello spettro. SUSPICIOUS indica un caso dubbio da revisionare, non una transcodifica certa.") }}
+        </span>
+        <strong>{{ track.forensic_verdict or "—" }}</strong>
+    </article>
+    <article class="stat">
+        <span>
+            Lossy score
+            {{ help("Numero di indizi compatibili con una sorgente compressa. Non è una percentuale: un valore basso significa pochi indizi lossy.") }}
+        </span>
+        <strong>{{ spectral.get("lossy_score", "—") }}</strong>
+    </article>
+    <article class="stat">
+        <span>
+            Natural score
+            {{ help("Numero di caratteristiche compatibili con audio naturale, analogico o realmente lossless. Un valore alto bilancia gli indizi sospetti.") }}
+        </span>
+        <strong>{{ spectral.get("natural_score", "—") }}</strong>
+    </article>
+</section>
+
+<section class="detail-grid">
+    <article class="panel detail-card">
+        <h2>Spectral analysis</h2>
+        <dl>
+            <div>
+                <dt>
+                    Cutoff
+                    {{ help("Frequenza più alta con contenuto significativo. Circa 22,05 kHz è normale per audio a 44,1 kHz; un taglio netto più basso può essere sospetto.") }}
+                </dt>
+                <dd>{{ spectral.get("cutoff_hz_str") or "—" }}</dd>
+            </div>
+            <div>
+                <dt>
+                    Walled segments
+                    {{ help("Numero di segmenti nei quali è stato rilevato un muro di frequenza. Più il rapporto è vicino al totale, più il fenomeno riguarda l’intera traccia.") }}
+                </dt>
+                <dd>
+                    {{ spectral.get("segment_walled", "—") }}
+                    /
+                    {{ spectral.get("segment_total", "—") }}
+                </dd>
+            </div>
+            <div>
+                <dt>
+                    Segment wall
+                    {{ help("Frequenza approssimativa del muro rilevato. Da sola non dimostra una transcodifica: può dipendere anche dal mastering o dalla sorgente analogica.") }}
+                </dt>
+                <dd>
+                    {% if spectral.get("segment_wall_hz") %}
+                        {{ "%.0f"|format(spectral.get("segment_wall_hz")) }} Hz
+                    {% else %}
+                        —
+                    {% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>
+                    Confidence
+                    {{ help("Forza euristica del verdetto, non probabilità matematica che il file sia lossy. Un valore intermedio indica incertezza.") }}
+                </dt>
+                <dd>{{ spectral.get("net_confidence_pct", "—") }}%</dd>
+            </div>
+            <div>
+                <dt>
+                    Codec fingerprint
+                    {{ help("Somiglianza con un limite spettrale tipico di un codec lossy. È un indizio specifico, ma va sempre valutato insieme agli altri segnali.") }}
+                </dt>
+                <dd>{{ spectral.get("codec_fingerprint") or "None detected" }}</dd>
+            </div>
+            <div>
+                <dt>
+                    Frequency rolloff
+                    {{ help("Descrive quanto gradualmente diminuiscono le alte frequenze. Un decadimento graduale è spesso naturale; un taglio netto è più sospetto.") }}
+                </dt>
+                <dd>{{ spectral.get("cutoff_sharpness_interp") or "—" }}</dd>
+            </div>
+        </dl>
+    </article>
+
+    <article class="panel detail-card">
+        <h2>Automatic verdict</h2>
+        <p class="verdict-text">
+            {{ spectral.get("primary_verdict") or track.forensic_verdict or "—" }}
+        </p>
+
+        <h3>Suspicious evidence</h3>
+        <ul class="evidence suspicious">
+        {% for item in spectral.get("evidence", []) %}
+            <li>{{ item }}</li>
+        {% else %}
+            <li>No suspicious evidence recorded.</li>
+        {% endfor %}
+        </ul>
+    </article>
+</section>
+
+<section class="panel detail-card evidence-section">
+    <h2>Natural lossless indicators</h2>
+    <ul class="evidence natural">
+    {% for item in spectral.get("natural_evidence", []) %}
+        <li>{{ item }}</li>
+    {% else %}
+        <li>No natural indicators recorded.</li>
+    {% endfor %}
+    </ul>
+</section>
+
+{% if track.status == "QUARANTINE" %}
+<section class="review-box">
+    <div>
+        <p class="eyebrow">Human review</p>
+        <h2>{{ track.human_review }}</h2>
+        <p>
+            The automatic forensic verdict remains unchanged regardless
+            of the human decision.
+        </p>
+    </div>
+
+    <div class="review-actions">
+        <form method="post" action="/tracks/{{ track.id }}/review/reject">
+            <button class="button danger" type="submit">Reject</button>
+        </form>
+
+        {% if track.human_review != "NONE" %}
+        <form method="post" action="/tracks/{{ track.id }}/review/reset">
+            <button class="button secondary" type="submit">Reset</button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="/tracks/{{ track.id }}/review/approve">
+            <button class="button success" type="submit">Approve</button>
+        </form>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
