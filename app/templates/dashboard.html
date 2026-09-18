@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · Lossless Validator{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Music pipeline</p>
+        <h1>Releases</h1>
+    </div>
+</section>
+
+<section class="stats">
+    <article class="stat">
+        <span>Total</span>
+        <strong>{{ counters.total }}</strong>
+    </article>
+    <article class="stat pass">
+        <span>Passed</span>
+        <strong>{{ counters.pass }}</strong>
+    </article>
+    <article class="stat quarantine">
+        <span>Quarantine</span>
+        <strong>{{ counters.quarantine }}</strong>
+    </article>
+    <article class="stat rejected">
+        <span>Rejected</span>
+        <strong>{{ counters.rejected }}</strong>
+    </article>
+</section>
+
+<section class="panel">
+    {% if releases %}
+    <table>
+        <thead>
+            <tr>
+                <th>Release</th>
+                <th>Tracks</th>
+                <th>Passed</th>
+                <th>Review</th>
+                <th>Rejected</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for release in releases %}
+            <tr>
+                <td>
+                    <a href="/releases/{{ release.id }}">
+                        {{ release.title }}
+                    </a>
+                </td>
+                <td>{{ release.total_tracks }}</td>
+                <td>{{ release.pass_tracks }}</td>
+                <td>{{ release.quarantine_tracks }}</td>
+                <td>{{ release.rejected_tracks }}</td>
+                <td>
+                    <span class="badge {{ release.status|lower }}">
+                        {{ release.status }}
+                    </span>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="empty">
+            <h2>No reports imported</h2>
+            <p>Import a validator JSON report to populate the dashboard.</p>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

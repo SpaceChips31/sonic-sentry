@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{{ release.title }} · Lossless Validator{% endblock %}
+
+{% block content %}
+<a class="back" href="/">← Releases</a>
+
+<section class="release-header">
+    <div>
+        <p class="eyebrow">Release</p>
+        <h1>{{ release.title }}</h1>
+        <p class="source-path">{{ release.source_path }}</p>
+    </div>
+
+    <span class="badge large {{ release.status|lower }}">
+        {{ release.status }}
+    </span>
+</section>
+
+<section class="stats">
+    <article class="stat">
+        <span>Total tracks</span>
+        <strong>{{ release.total_tracks }}</strong>
+    </article>
+    <article class="stat pass">
+        <span>Passed</span>
+        <strong>{{ release.pass_tracks }}</strong>
+    </article>
+    <article class="stat quarantine">
+        <span>Review</span>
+        <strong>{{ release.quarantine_tracks }}</strong>
+    </article>
+    <article class="stat rejected">
+        <span>Rejected</span>
+        <strong>{{ release.rejected_tracks }}</strong>
+    </article>
+</section>
+
+<section class="panel">
+    <table>
+        <thead>
+            <tr>
+                <th>Track</th>
+                <th>Integrity</th>
+                <th>Forensic verdict</th>
+                <th>Review</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for track in release.tracks %}
+            <tr class="{% if track.status != 'PASS' %}attention{% endif %}">
+                <td>{{ track.display_path }}</td>
+                <td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td>
+                <td>{{ track.forensic_verdict or "—" }}</td>
+                <td>{{ track.human_review }}</td>
+                <td>
+                    <span class="badge {{ track.status|lower }}">
+                        {{ track.status }}
+                    </span>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
