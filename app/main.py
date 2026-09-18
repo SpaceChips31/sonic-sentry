@@ -173,10 +173,6 @@ def new_analysis(
                 "name": entry.name,
                 "relative": str(relative),
                 "encoded": quote(str(relative)),
-                "flac_count": sum(
-                    1 for file in entry.rglob("*")
-                    if file.is_file() and file.suffix.lower() == ".flac"
-                ),
             })
 
     roots = [

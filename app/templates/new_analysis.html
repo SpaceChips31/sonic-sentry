@@ -87,6 +87,23 @@
         {{ current }}
     </div>
 
+    {% if relative_path %}
+    <form class="analyze-current"
+          method="post"
+          action="/analyses/container">
+        <input type="hidden"
+               name="root_index"
+               value="{{ root_index }}">
+        <input type="hidden"
+               name="relative_path"
+               value="{{ relative_path }}">
+
+        <button class="button success" type="submit">
+            Analyze current folder
+        </button>
+    </form>
+    {% endif %}
+
     {% if parent_path is not none %}
     <a class="directory-row"
        href="/analyses/new?root={{ root_index }}&path={{ parent_encoded }}">
@@ -95,29 +112,11 @@
     {% endif %}
 
     {% for directory in directories %}
-    <div class="directory-row">
-        <a href="/analyses/new?root={{ root_index }}&path={{ directory.encoded }}">
-            📁 {{ directory.name }}
-        </a>
-
-        <div class="directory-actions">
-            <span>{{ directory.flac_count }} FLAC</span>
-
-            {% if directory.flac_count > 0 %}
-            <form method="post" action="/analyses/container">
-                <input type="hidden"
-                       name="root_index"
-                       value="{{ root_index }}">
-                <input type="hidden"
-                       name="relative_path"
-                       value="{{ directory.relative }}">
-                <button class="button compact success" type="submit">
-                    Analyze
-                </button>
-            </form>
-            {% endif %}
-        </div>
-    </div>
+    <a class="directory-row"
+       href="/analyses/new?root={{ root_index }}&path={{ directory.encoded }}">
+        <span>📁 {{ directory.name }}</span>
+        <span aria-hidden="true">→</span>
+    </a>
     {% else %}
     <div class="empty">
         <p>No subdirectories found.</p>

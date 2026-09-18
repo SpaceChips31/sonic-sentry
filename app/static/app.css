@@ -587,3 +587,21 @@ input[type="file"] {
         font-size: 12px;
     }
 }
+
+
+/* fast-container-browser-v1 */
+.analyze-current {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 14px;
+}
+
+a.directory-row {
+    color: var(--text);
+    text-decoration: none;
+}
+
+a.directory-row:hover {
+    background: rgba(85, 183, 255, .06);
+    color: var(--accent);
+}
