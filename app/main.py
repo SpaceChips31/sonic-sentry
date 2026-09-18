@@ -9,7 +9,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
@@ -148,19 +148,52 @@ def analyses(request: Request):
             )
         ).all()
 
-        has_active_jobs = any(
-            job.status in {"QUEUED", "ANALYZING"}
-            for job in jobs
+        job_groups = {
+            status: [
+                job for job in jobs
+                if job.status == status
+            ]
+            for status in (
+                "ANALYZING",
+                "QUEUED",
+                "FAILED",
+                "COMPLETED",
+            )
+        }
+
+        has_active_jobs = bool(
+            job_groups["ANALYZING"]
+            or job_groups["QUEUED"]
         )
 
         return templates.TemplateResponse(
             request=request,
             name="analyses.html",
             context={
-                "jobs": jobs,
+                "job_groups": job_groups,
                 "has_active_jobs": has_active_jobs,
             },
         )
+
+
+@app.post("/analyses/clear/{status}")
+def clear_analysis_history(status: str):
+    normalized = status.upper()
+
+    if normalized not in {"COMPLETED", "FAILED"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only completed or failed jobs can be cleared",
+        )
+
+    with SessionLocal() as session:
+        session.execute(
+            delete(AnalysisJob)
+            .where(AnalysisJob.status == normalized)
+        )
+        session.commit()
+
+    return RedirectResponse("/analyses", status_code=303)
 
 
 @app.get("/analyses/new", response_class=HTMLResponse)

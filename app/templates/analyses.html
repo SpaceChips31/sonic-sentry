@@ -1,5 +1,41 @@
 {% extends "base.html" %}
 
+{% macro job_table(jobs) %}
+<div class="queue-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Source</th>
+                <th>Release</th>
+                <th>Created</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for job in jobs %}
+            <tr>
+                <td>{{ job.source_type }}</td>
+                <td title="{{ job.source_path }}">
+                    {{ job.display_name }}
+                </td>
+                <td>{{ job.created_at }}</td>
+                <td>
+                    <span class="badge {{ job.status|lower }}">
+                        {{ job.status }}
+                    </span>
+                </td>
+            </tr>
+            {% if job.error %}
+            <tr class="job-error-row">
+                <td colspan="4">{{ job.error }}</td>
+            </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
 {% block title %}Analysis queue · Lossless Validator{% endblock %}
 
 {% block content %}
@@ -14,37 +50,112 @@
     </a>
 </section>
 
-<section class="panel">
-    {% if jobs %}
-    <table>
-        <thead>
-            <tr>
-                <th>Source</th>
-                <th>Release</th>
-                <th>Created</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for job in jobs %}
-            <tr>
-                <td>{{ job.source_type }}</td>
-                <td title="{{ job.source_path }}">{{ job.display_name }}</td>
-                <td>{{ job.created_at }}</td>
-                <td>
-                    <span class="badge {{ job.status|lower }}">
-                        {{ job.status }}
-                    </span>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty">
-        <h2>Queue empty</h2>
-        <p>Add a local or container release to begin.</p>
-    </div>
-    {% endif %}
-</section>
+{% if has_active_jobs %}
+<div class="queue-live" role="status">
+    <span class="live-dot"></span>
+    Live updates active · refreshing every 3 seconds
+</div>
+{% endif %}
+
+<div class="queue-groups">
+    <details class="queue-group analyzing-group"
+             {% if job_groups.ANALYZING %}open{% endif %}>
+        <summary>
+            <span>Analyzing</span>
+            <span class="group-count">
+                {{ job_groups.ANALYZING|length }}
+            </span>
+        </summary>
+
+        {% if job_groups.ANALYZING %}
+            {{ job_table(job_groups.ANALYZING) }}
+        {% else %}
+            <p class="group-empty">No analysis currently running.</p>
+        {% endif %}
+    </details>
+
+    <details class="queue-group queued-group"
+             {% if job_groups.QUEUED %}open{% endif %}>
+        <summary>
+            <span>Queued</span>
+            <span class="group-count">
+                {{ job_groups.QUEUED|length }}
+            </span>
+        </summary>
+
+        {% if job_groups.QUEUED %}
+            {{ job_table(job_groups.QUEUED) }}
+        {% else %}
+            <p class="group-empty">No releases waiting.</p>
+        {% endif %}
+    </details>
+
+    <details class="queue-group failed-group">
+        <summary>
+            <span>Failed</span>
+
+            <span class="summary-actions">
+                <span class="group-count">
+                    {{ job_groups.FAILED|length }}
+                </span>
+
+                {% if job_groups.FAILED %}
+                <form method="post"
+                      action="/analyses/clear/failed"
+                      onsubmit="return confirm(
+                          'Clear failed jobs from queue history?'
+                      )">
+                    <button class="clear-button" type="submit">
+                        Clear
+                    </button>
+                </form>
+                {% endif %}
+            </span>
+        </summary>
+
+        {% if job_groups.FAILED %}
+            {{ job_table(job_groups.FAILED) }}
+        {% else %}
+            <p class="group-empty">No failed analyses.</p>
+        {% endif %}
+    </details>
+
+    <details class="queue-group completed-group">
+        <summary>
+            <span>Completed</span>
+
+            <span class="summary-actions">
+                <span class="group-count">
+                    {{ job_groups.COMPLETED|length }}
+                </span>
+
+                {% if job_groups.COMPLETED %}
+                <form method="post"
+                      action="/analyses/clear/completed"
+                      onsubmit="return confirm(
+                          'Clear completed jobs from queue history?'
+                      )">
+                    <button class="clear-button" type="submit">
+                        Clear
+                    </button>
+                </form>
+                {% endif %}
+            </span>
+        </summary>
+
+        {% if job_groups.COMPLETED %}
+            {{ job_table(job_groups.COMPLETED) }}
+        {% else %}
+            <p class="group-empty">No completed analyses.</p>
+        {% endif %}
+    </details>
+</div>
+
+{% if has_active_jobs %}
+<script>
+    window.setTimeout(() => {
+        window.location.reload();
+    }, 3000);
+</script>
+{% endif %}
 {% endblock %}

@@ -605,3 +605,121 @@ a.directory-row:hover {
     background: rgba(85, 183, 255, .06);
     color: var(--accent);
 }
+
+
+/* grouped-analysis-queue-v1 */
+.queue-groups {
+    display: grid;
+    gap: 14px;
+}
+
+.queue-group {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.queue-group > summary {
+    display: flex;
+    min-height: 58px;
+    padding: 0 18px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: 800;
+    list-style: none;
+}
+
+.queue-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.queue-group > summary::before {
+    content: "›";
+    margin-right: 4px;
+    color: var(--muted);
+    transform: rotate(0deg);
+    transition: transform .15s ease;
+}
+
+.queue-group[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.queue-group > summary > span:first-of-type {
+    margin-right: auto;
+}
+
+.analyzing-group > summary {
+    border-left: 3px solid var(--accent);
+}
+
+.queued-group > summary {
+    border-left: 3px solid #7aa7cc;
+}
+
+.failed-group > summary {
+    border-left: 3px solid var(--rejected);
+}
+
+.completed-group > summary {
+    border-left: 3px solid var(--pass);
+}
+
+.group-count {
+    display: inline-flex;
+    min-width: 27px;
+    height: 27px;
+    padding: 0 8px;
+    border-radius: 999px;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-raised);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.summary-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.summary-actions form {
+    margin: 0;
+}
+
+.clear-button {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.clear-button:hover {
+    border-color: var(--rejected);
+    color: var(--rejected);
+}
+
+.queue-table {
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+}
+
+.group-empty {
+    margin: 0;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+}
+
+.job-error-row td {
+    color: var(--rejected);
+    background: rgba(239, 106, 116, .06);
+    white-space: normal;
+}
