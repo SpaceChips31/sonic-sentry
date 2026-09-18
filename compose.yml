@@ -2,8 +2,6 @@ services:
   web:
     build:
       context: .
-      args:
-        AUDIO_FORENSIC_COMMIT: b10cab6f29e9a43677e3adae97a7c39e0793268
     image: spacechips/lossless-validator:local
     container_name: lossless-validator-web
     user: "${PUID}:${PGID}"
@@ -15,9 +13,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./reports:/app/reports
-      - /mnt/media/music/validator/uploads:/app/uploads
-      - /mnt/media/downloads/soulseek:/data/downloads/soulseek:ro
-      - /mnt/media/music/legacy:/data/music/legacy:ro
+      - ./uploads:/app/uploads
+      - /mnt/media:/data:ro
     ports:
       - "${LOSSLESS_VALIDATOR_PORT:-8090}:8090"
     restart: unless-stopped
@@ -45,9 +42,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./reports:/app/reports
-      - /mnt/media/music/validator/uploads:/app/uploads
-      - /mnt/media/downloads/soulseek:/data/downloads/soulseek:ro
-      - /mnt/media/music/legacy:/data/music/legacy:ro
+      - ./uploads:/app/uploads
+      - /mnt/media:/data:ro
     depends_on:
       web:
         condition: service_healthy
