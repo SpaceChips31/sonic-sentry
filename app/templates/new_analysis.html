@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}New analysis · Lossless Validator{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Import</p>
+        <h1>New analysis</h1>
+    </div>
+</section>
+
+<section class="import-grid">
+    <article class="panel import-card">
+        <h2>Upload from device</h2>
+        <p>
+            Select individual FLAC files or an entire release folder.
+            Artwork, CUE and ripping logs are preserved.
+        </p>
+
+        <form method="post"
+              action="/analyses/upload"
+              enctype="multipart/form-data">
+            <label>Individual files</label>
+            <input type="file"
+                   name="files"
+                   multiple
+                   accept=".flac,.cue,.log,.jpg,.jpeg,.png,.txt,.m3u,.m3u8">
+
+            <label>Complete folder</label>
+            <input type="file"
+                   name="files"
+                   multiple
+                   webkitdirectory
+                   directory>
+
+            <button class="button success" type="submit">
+                Add to queue
+            </button>
+        </form>
+    </article>
+
+    <article class="panel import-card">
+        <h2>Existing report</h2>
+        <p>
+            Import a JSON report previously produced by the validator.
+            No audio analysis will be repeated.
+        </p>
+
+        <form method="post"
+              action="/analyses/report"
+              enctype="multipart/form-data">
+            <label>Validator report</label>
+            <input type="file"
+                   name="report"
+                   required
+                   accept=".json,application/json">
+
+            <button class="button secondary" type="submit">
+                Import report
+            </button>
+        </form>
+    </article>
+</section>
+
+<section class="panel browser-panel">
+    <div class="browser-heading">
+        <div>
+            <h2>Browse container</h2>
+            <p>Select a release from an authorized mounted directory.</p>
+        </div>
+
+        <a href="/analyses">View queue →</a>
+    </div>
+
+    {% if roots %}
+    <nav class="source-roots">
+        {% for item in roots %}
+        <a class="{% if item.index == root_index %}active{% endif %}"
+           href="/analyses/new?root={{ item.index }}">
+            {{ item.name }}
+        </a>
+        {% endfor %}
+    </nav>
+
+    <div class="current-path">
+        {{ current }}
+    </div>
+
+    {% if parent_path is not none %}
+    <a class="directory-row"
+       href="/analyses/new?root={{ root_index }}&path={{ parent_encoded }}">
+        <span>📁 ..</span>
+    </a>
+    {% endif %}
+
+    {% for directory in directories %}
+    <div class="directory-row">
+        <a href="/analyses/new?root={{ root_index }}&path={{ directory.encoded }}">
+            📁 {{ directory.name }}
+        </a>
+
+        <div class="directory-actions">
+            <span>{{ directory.flac_count }} FLAC</span>
+
+            {% if directory.flac_count > 0 %}
+            <form method="post" action="/analyses/container">
+                <input type="hidden"
+                       name="root_index"
+                       value="{{ root_index }}">
+                <input type="hidden"
+                       name="relative_path"
+                       value="{{ directory.relative }}">
+                <button class="button compact success" type="submit">
+                    Analyze
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty">
+        <p>No subdirectories found.</p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">
+        <p>No source roots configured.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

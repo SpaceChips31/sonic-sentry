@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis queue · Lossless Validator{% endblock %}
+
+{% block content %}
+<section class="page-heading">
+    <div>
+        <p class="eyebrow">Pipeline</p>
+        <h1>Analysis queue</h1>
+    </div>
+
+    <a class="button success" href="/analyses/new">
+        New analysis
+    </a>
+</section>
+
+<section class="panel">
+    {% if jobs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Source</th>
+                <th>Release</th>
+                <th>Created</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for job in jobs %}
+            <tr>
+                <td>{{ job.source_type }}</td>
+                <td title="{{ job.source_path }}">{{ job.display_name }}</td>
+                <td>{{ job.created_at }}</td>
+                <td>
+                    <span class="badge {{ job.status|lower }}">
+                        {{ job.status }}
+                    </span>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+        <h2>Queue empty</h2>
+        <p>Add a local or container release to begin.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

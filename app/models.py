@@ -45,3 +45,16 @@ class Track(Base):
     forensic_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     release: Mapped[Release] = relationship(back_populates="tracks")
+
+
+
+class AnalysisJob(Base):
+    __tablename__ = "analysis_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_type: Mapped[str] = mapped_column(String)
+    source_path: Mapped[str] = mapped_column(String)
+    display_name: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
+    created_at: Mapped[str] = mapped_column(String)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)

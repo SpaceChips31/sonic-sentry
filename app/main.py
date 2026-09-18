@@ -1,15 +1,21 @@
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+from urllib.parse import quote
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
-from app.models import Release, Track
+from app.models import AnalysisJob, Release, Track
+from app.services.importer import import_report
 
 
 @asynccontextmanager
@@ -27,6 +33,22 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
+ALLOWED_UPLOAD_EXTENSIONS = {
+    ".flac",
+    ".cue",
+    ".log",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".txt",
+    ".m3u",
+    ".m3u8",
+}
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
 
 def recalculate_release_status(release: Release) -> None:
     if any(
@@ -35,17 +57,53 @@ def recalculate_release_status(release: Release) -> None:
         for track in release.tracks
     ):
         release.status = "REJECTED"
-        return
-
-    if any(
+    elif any(
         track.status == "QUARANTINE"
         and track.human_review != "APPROVED"
         for track in release.tracks
     ):
         release.status = "QUARANTINE"
-        return
+    else:
+        release.status = "PASS"
 
-    release.status = "PASS"
+
+def resolve_source_directory(root_index: int, relative_path: str) -> Path:
+    if root_index < 0 or root_index >= len(SOURCE_ROOTS):
+        raise HTTPException(status_code=400, detail="Invalid source root")
+
+    root = SOURCE_ROOTS[root_index]
+    candidate = (root / relative_path).resolve()
+
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Path is outside the authorized source root",
+        ) from exc
+
+    if not candidate.is_dir():
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    return candidate
+
+
+def safe_upload_path(filename: str) -> Path:
+    normalized = filename.replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise HTTPException(status_code=400, detail="Unsafe upload path")
+
+    parts = tuple(
+        part for part in candidate.parts
+        if part not in ("", ".")
+    )
+
+    if not parts:
+        raise HTTPException(status_code=400, detail="Invalid upload filename")
+
+    return Path(*parts)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -70,6 +128,209 @@ def dashboard(request: Request):
                 "counters": counters,
             },
         )
+
+
+@app.get("/analyses", response_class=HTMLResponse)
+def analyses(request: Request):
+    with SessionLocal() as session:
+        jobs = session.scalars(
+            select(AnalysisJob).order_by(AnalysisJob.id.desc())
+        ).all()
+
+        return templates.TemplateResponse(
+            request=request,
+            name="analyses.html",
+            context={"jobs": jobs},
+        )
+
+
+@app.get("/analyses/new", response_class=HTMLResponse)
+def new_analysis(
+    request: Request,
+    root: int = 0,
+    path: str = "",
+):
+    current = None
+    directories = []
+    parent_path = None
+
+    if SOURCE_ROOTS:
+        current = resolve_source_directory(root, path)
+        root_path = SOURCE_ROOTS[root]
+
+        relative_current = current.relative_to(root_path)
+
+        if relative_current != Path("."):
+            parent = relative_current.parent
+            parent_path = "" if parent == Path(".") else str(parent)
+
+        for entry in sorted(
+            (item for item in current.iterdir() if item.is_dir()),
+            key=lambda item: item.name.casefold(),
+        ):
+            relative = entry.relative_to(root_path)
+            directories.append({
+                "name": entry.name,
+                "relative": str(relative),
+                "encoded": quote(str(relative)),
+                "flac_count": sum(
+                    1 for file in entry.rglob("*")
+                    if file.is_file() and file.suffix.lower() == ".flac"
+                ),
+            })
+
+    roots = [
+        {
+            "index": index,
+            "path": str(root_path),
+            "name": root_path.name or str(root_path),
+        }
+        for index, root_path in enumerate(SOURCE_ROOTS)
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="new_analysis.html",
+        context={
+            "roots": roots,
+            "root_index": root,
+            "relative_path": path,
+            "current": current,
+            "directories": directories,
+            "parent_path": parent_path,
+            "parent_encoded": quote(parent_path or ""),
+        },
+    )
+
+
+@app.post("/analyses/container")
+def create_container_analysis(
+    root_index: int = Form(...),
+    relative_path: str = Form(...),
+):
+    source = resolve_source_directory(root_index, relative_path)
+
+    if not any(
+        file.is_file() and file.suffix.lower() == ".flac"
+        for file in source.rglob("*")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="The selected directory contains no FLAC files",
+        )
+
+    with SessionLocal() as session:
+        job = AnalysisJob(
+            source_type="CONTAINER",
+            source_path=str(source),
+            display_name=source.name,
+            status="QUEUED",
+            created_at=utc_now(),
+        )
+        session.add(job)
+        session.commit()
+
+    return RedirectResponse("/analyses", status_code=303)
+
+
+@app.post("/analyses/upload")
+async def create_upload_analysis(
+    files: list[UploadFile] = File(...),
+):
+    accepted = []
+
+    for upload in files:
+        relative = safe_upload_path(upload.filename or "")
+
+        if relative.suffix.lower() in ALLOWED_UPLOAD_EXTENSIONS:
+            accepted.append((upload, relative))
+
+    if not any(
+        relative.suffix.lower() == ".flac"
+        for _, relative in accepted
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="At least one FLAC file is required",
+        )
+
+    upload_id = uuid4().hex
+    destination_root = (UPLOAD_ROOT / upload_id).resolve()
+    destination_root.mkdir(parents=True)
+
+    for upload, relative in accepted:
+        destination = (destination_root / relative).resolve()
+
+        try:
+            destination.relative_to(destination_root)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsafe destination path",
+            ) from exc
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+
+        with destination.open("wb") as output:
+            while chunk := await upload.read(1024 * 1024):
+                output.write(chunk)
+
+        await upload.close()
+
+    display_name = next(
+        (
+            relative.parts[0]
+            for _, relative in accepted
+            if len(relative.parts) > 1
+        ),
+        f"Local upload {upload_id[:8]}",
+    )
+
+    with SessionLocal() as session:
+        job = AnalysisJob(
+            source_type="UPLOAD",
+            source_path=str(destination_root),
+            display_name=display_name,
+            status="QUEUED",
+            created_at=utc_now(),
+        )
+        session.add(job)
+        session.commit()
+
+    return RedirectResponse("/analyses", status_code=303)
+
+
+@app.post("/analyses/report")
+async def upload_report(report: UploadFile = File(...)):
+    filename = Path(report.filename or "").name
+
+    if not filename.lower().endswith(".json"):
+        raise HTTPException(
+            status_code=400,
+            detail="The report must be a JSON file",
+        )
+
+    destination = REPORT_ROOT / f"{uuid4().hex}-{filename}"
+
+    with destination.open("wb") as output:
+        while chunk := await report.read(1024 * 1024):
+            output.write(chunk)
+
+    await report.close()
+
+    try:
+        release = import_report(destination)
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid validator report: {exc}",
+        ) from exc
+
+    return RedirectResponse(
+        f"/releases/{release.id}",
+        status_code=303,
+    )
 
 
 @app.get("/releases/{release_id}", response_class=HTMLResponse)
@@ -126,7 +387,7 @@ def review_track(track_id: int, decision: str):
     }
 
     if decision not in decisions:
-        raise HTTPException(status_code=400, detail="Invalid review decision")
+        raise HTTPException(status_code=400, detail="Invalid decision")
 
     with SessionLocal() as session:
         track = session.scalar(
@@ -152,7 +413,7 @@ def review_track(track_id: int, decision: str):
         session.commit()
 
         return RedirectResponse(
-            url=f"/tracks/{track.id}",
+            f"/tracks/{track.id}",
             status_code=303,
         )
 

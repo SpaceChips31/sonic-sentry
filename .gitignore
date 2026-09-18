@@ -6,3 +6,7 @@ data/*
 reports/*
 !reports/.gitkeep
 .env
+uploads/*
+!uploads/.gitkeep
+sample-input/*
+!sample-input/.gitkeep
