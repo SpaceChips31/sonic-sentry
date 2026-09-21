@@ -9,11 +9,7 @@ services:
       LOSSLESS_QUARANTINE_ROOT: /data/music/validator/quarantine
       LOSSLESS_REJECTED_ROOT: /data/music/validator/rejected
     volumes:
-      - "${LOSSLESS_INBOX_HOST:-/mnt/media/downloads/soulseek}:/data/downloads/soulseek"
-      - "${LOSSLESS_LEGACY_HOST:-/mnt/media/music/legacy}:/data/music/legacy"
-      - "${LOSSLESS_STAGING_HOST:-/mnt/media/music/validator/staging}:/data/music/validator/staging"
-      - "${LOSSLESS_QUARANTINE_HOST:-/mnt/media/music/validator/quarantine}:/data/music/validator/quarantine"
-      - "${LOSSLESS_REJECTED_HOST:-/mnt/media/music/validator/rejected}:/data/music/validator/rejected"
+      - "${MEDIA_ROOT:-/mnt/media}:/data"
 
   worker:
     environment:
@@ -25,8 +21,4 @@ services:
       LOSSLESS_QUARANTINE_ROOT: /data/music/validator/quarantine
       LOSSLESS_REJECTED_ROOT: /data/music/validator/rejected
     volumes:
-      - "${LOSSLESS_INBOX_HOST:-/mnt/media/downloads/soulseek}:/data/downloads/soulseek"
-      - "${LOSSLESS_LEGACY_HOST:-/mnt/media/music/legacy}:/data/music/legacy"
-      - "${LOSSLESS_STAGING_HOST:-/mnt/media/music/validator/staging}:/data/music/validator/staging"
-      - "${LOSSLESS_QUARANTINE_HOST:-/mnt/media/music/validator/quarantine}:/data/music/validator/quarantine"
-      - "${LOSSLESS_REJECTED_HOST:-/mnt/media/music/validator/rejected}:/data/music/validator/rejected"
+      - "${MEDIA_ROOT:-/mnt/media}:/data"
