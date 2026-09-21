@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -79,3 +79,13 @@ class ReleaseOperation(Base):
     created_at: Mapped[str] = mapped_column(String)
 
     release: Mapped[Release] = relationship(back_populates="operations")
+
+
+class AnalysisSource(Base):
+    __tablename__ = "analysis_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    path: Mapped[str] = mapped_column(String, unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String, default="FILESYSTEM")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
