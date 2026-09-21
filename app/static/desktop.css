@@ -540,3 +540,25 @@ input[type="file"] {
     .browser-filter { flex-wrap: wrap; }
     .browser-filter input[type="search"] { flex-basis: 100%; }
 }
+
+
+/* live-filter-and-batch-v1 */
+.analysis-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 4px;
+}
+.analysis-actions form { margin: 0; }
+.batch-help {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 11px;
+}
+#directory-results {
+    min-height: 44px;
+}
+.browser-filter input[type="search"]:focus {
+    outline: 1px solid var(--accent);
+    outline-offset: 0;
+}
