@@ -12,16 +12,19 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import selectinload
 
-from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
+from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
-from app.models import AnalysisJob, Release, Track
+from app.models import AnalysisJob, AnalysisSource, Release, Track
 from app.services.importer import import_report
+from app.presentation import configure_templates
+from app.services.sources import seed_analysis_sources
 from app.version import APP_VERSION
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    seed_analysis_sources()
     yield
 
 
@@ -32,8 +35,7 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
-templates.env.globals["app_version"] = APP_VERSION
+templates = configure_templates(Jinja2Templates(directory="app/templates"))
 
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".flac",
@@ -69,11 +71,14 @@ def recalculate_release_status(release: Release) -> None:
         release.status = "PASS"
 
 
-def resolve_source_directory(root_index: int, relative_path: str) -> Path:
-    if root_index < 0 or root_index >= len(SOURCE_ROOTS):
-        raise HTTPException(status_code=400, detail="Invalid source root")
+def resolve_source_directory(source_id: int, relative_path: str) -> tuple[AnalysisSource, Path]:
+    with SessionLocal() as session:
+        source = session.get(AnalysisSource, source_id)
+        if source is None or not source.enabled:
+            raise HTTPException(status_code=404, detail="Analysis source not found")
+        session.expunge(source)
 
-    root = SOURCE_ROOTS[root_index]
+    root = Path(source.path).resolve()
     candidate = (root / relative_path).resolve()
 
     try:
@@ -87,8 +92,7 @@ def resolve_source_directory(root_index: int, relative_path: str) -> Path:
     if not candidate.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
 
-    return candidate
-
+    return source, candidate
 
 def safe_upload_path(filename: str) -> Path:
     normalized = filename.replace("\\", "/")
@@ -279,52 +283,67 @@ def clear_analysis_history(status: str):
 @app.get("/analyses/new", response_class=HTMLResponse)
 def new_analysis(
     request: Request,
-    root: int = 0,
+    source: int | None = None,
     path: str = "",
+    q: str = "",
 ):
+    with SessionLocal() as session:
+        sources = list(
+            session.scalars(
+                select(AnalysisSource)
+                .where(AnalysisSource.enabled.is_(True))
+                .order_by(AnalysisSource.name, AnalysisSource.id)
+            ).all()
+        )
+
+    current_source = None
     current = None
     directories = []
     parent_path = None
+    total_directories = 0
+    query = q.strip()
 
-    if SOURCE_ROOTS:
-        current = resolve_source_directory(root, path)
-        root_path = SOURCE_ROOTS[root]
-
+    if sources:
+        source_id = source if any(item.id == source for item in sources) else sources[0].id
+        current_source, current = resolve_source_directory(source_id, path)
+        root_path = Path(current_source.path).resolve()
         relative_current = current.relative_to(root_path)
 
         if relative_current != Path("."):
             parent = relative_current.parent
             parent_path = "" if parent == Path(".") else str(parent)
 
-        for entry in sorted(
+        entries = sorted(
             (item for item in current.iterdir() if item.is_dir()),
             key=lambda item: item.name.casefold(),
-        ):
+        )
+        if query:
+            entries = [item for item in entries if query.casefold() in item.name.casefold()]
+        total_directories = len(entries)
+
+        for entry in entries[:200]:
             relative = entry.relative_to(root_path)
             directories.append({
                 "name": entry.name,
                 "relative": str(relative),
                 "encoded": quote(str(relative)),
             })
-
-    roots = [
-        {
-            "index": index,
-            "path": str(root_path),
-            "name": root_path.name or str(root_path),
-        }
-        for index, root_path in enumerate(SOURCE_ROOTS)
-    ]
+    else:
+        source_id = None
 
     return templates.TemplateResponse(
         request=request,
         name="new_analysis.html",
         context={
-            "roots": roots,
-            "root_index": root,
+            "sources": sources,
+            "source_id": source_id,
+            "current_source": current_source,
             "relative_path": path,
+            "query": query,
             "current": current,
             "directories": directories,
+            "total_directories": total_directories,
+            "results_limited": total_directories > len(directories),
             "parent_path": parent_path,
             "parent_encoded": quote(parent_path or ""),
         },
@@ -333,10 +352,10 @@ def new_analysis(
 
 @app.post("/analyses/container")
 def create_container_analysis(
-    root_index: int = Form(...),
+    source_id: int = Form(...),
     relative_path: str = Form(...),
 ):
-    source = resolve_source_directory(root_index, relative_path)
+    configured_source, source = resolve_source_directory(source_id, relative_path)
 
     if not any(
         file.is_file() and file.suffix.lower() == ".flac"
@@ -349,7 +368,7 @@ def create_container_analysis(
 
     with SessionLocal() as session:
         job = AnalysisJob(
-            source_type="CONTAINER",
+            source_type=configured_source.kind,
             source_path=str(source),
             display_name=source.name,
             status="QUEUED",
@@ -359,7 +378,6 @@ def create_container_analysis(
         session.commit()
 
     return RedirectResponse("/analyses", status_code=303)
-
 
 @app.post("/analyses/upload")
 async def create_upload_analysis(
