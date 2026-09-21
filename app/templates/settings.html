@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Settings · Lossless Validator{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">Configuration</p>
+    <h1>Settings</h1>
+    <p class="heading-copy">Runtime configuration is supplied by Docker environment variables.</p>
+  </div>
+</section>
+
+<section class="panel settings-panel">
+  <div class="settings-row">
+    <span>File operations</span>
+    <strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ 'ENABLED' if settings.enabled else 'DISABLED' }}</strong>
+  </div>
+  <div class="settings-row">
+    <span>Automatic routing</span>
+    <strong>{{ 'ENABLED' if settings.auto_route else 'MANUAL' }}</strong>
+  </div>
+</section>
+
+<section class="settings-grid">
+  {% for name, item in [('Picard staging', settings.staging), ('Quarantine', settings.quarantine), ('Rejected', settings.rejected)] %}
+  <article class="panel settings-card">
+    <h2>{{ name }}</h2>
+    <code>{{ item.path }}</code>
+    <p>
+      <span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span>
+      <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span>
+    </p>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="panel settings-panel">
+  <h2>Movable source roots</h2>
+  {% for item in settings.movable_roots %}
+  <div class="settings-row">
+    <code>{{ item.path }}</code>
+    <span>
+      <span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span>
+      <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span>
+    </span>
+  </div>
+  {% else %}
+  <p class="settings-warning">No movable roots configured. File actions cannot run.</p>
+  {% endfor %}
+</section>
+
+<section class="panel settings-help">
+  <h2>Docker variables</h2>
+  <dl>
+    <div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>Enable album-level filesystem actions.</dd></div>
+    <div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>Route albums automatically after analysis.</dd></div>
+    <div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>Colon-separated roots from which albums may be moved or deleted.</dd></div>
+    <div><dt>LOSSLESS_STAGING_ROOT</dt><dd>Destination consumed by MusicBrainz Picard.</dd></div>
+    <div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>Destination for albums requiring review.</dd></div>
+    <div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>Destination for rejected albums.</dd></div>
+  </dl>
+</section>
+{% endblock %}

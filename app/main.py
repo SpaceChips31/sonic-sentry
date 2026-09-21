@@ -467,7 +467,10 @@ def release_detail(request: Request, release_id: int):
         release = session.scalar(
             select(Release)
             .where(Release.id == release_id)
-            .options(selectinload(Release.tracks))
+            .options(
+                selectinload(Release.tracks),
+                selectinload(Release.operations),
+            )
         )
 
         if release is None:
@@ -549,3 +552,8 @@ def review_track(track_id: int, decision: str):
 @app.get("/health")
 def health():
     return {"status": "ok", "version": APP_VERSION}
+
+
+from app.workflow import router as workflow_router
+
+app.include_router(workflow_router)

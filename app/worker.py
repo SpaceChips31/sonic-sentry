@@ -8,6 +8,7 @@ from app.config import REPORT_ROOT
 from app.database import Base, SessionLocal, engine
 from app.models import AnalysisJob
 from app.services.importer import import_report
+from app.services.file_workflow import auto_route_release
 
 VALIDATOR = Path("/app/validator/validate_release.py")
 EXPECTED_EXIT_CODES = {0, 10, 20}
@@ -91,9 +92,16 @@ def process_job(job):
 
         release = import_report(report)
 
+        destination = auto_route_release(release.id)
+
         print(
             f"Job {job_id} completed: "
-            f"release #{release.id} [{release.status}]",
+            f"release #{release.id} [{release.status}]"
+            + (
+                f" -> {destination}"
+                if destination is not None
+                else ""
+            ),
             flush=True,
         )
 

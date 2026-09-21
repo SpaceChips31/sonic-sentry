@@ -25,6 +25,11 @@ class Release(Base):
         cascade="all, delete-orphan",
         order_by="Track.path",
     )
+    operations: Mapped[list[ReleaseOperation]] = relationship(
+        back_populates="release",
+        cascade="all, delete-orphan",
+        order_by="ReleaseOperation.id.desc()",
+    )
 
 
 class Track(Base):
@@ -58,3 +63,19 @@ class AnalysisJob(Base):
     status: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
     created_at: Mapped[str] = mapped_column(String)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ReleaseOperation(Base):
+    __tablename__ = "release_operations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    release_id: Mapped[int] = mapped_column(
+        ForeignKey("releases.id", ondelete="CASCADE"),
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String, index=True)
+    source_path: Mapped[str] = mapped_column(Text)
+    destination_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(String)
+
+    release: Mapped[Release] = relationship(back_populates="operations")
