@@ -1,5 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · Lossless Validator{% endblock %}
+{% block title %}Dashboard · Lossless Validator{% if has_active_jobs %}
+<script>window.setTimeout(() => window.location.reload(), 5000);</script>
+{% endif %}
+{% endblock %}
 {% block content %}
 <section class="page-heading dashboard-heading">
   <div><p class="eyebrow">Music pipeline</p><h1>Dashboard</h1><p class="heading-copy">Quality overview and analysis activity across the indexed library.</p></div>
@@ -14,6 +17,23 @@
   <article class="stat quarantine"><span>Awaiting review</span><strong>{{ track_counters.pending_review }}</strong><small>{{ release_counters.quarantine }} quarantined releases</small></article>
   <article class="stat rejected"><span>Rejected releases</span><strong>{{ release_counters.rejected }}</strong><small>{{ track_counters.rejected }} integrity failures</small></article>
 </section>
+{% if active_jobs %}
+<section class="active-work-panel">
+  <div class="section-heading">
+    <div><p class="eyebrow">Currently processing</p><h2>Active work</h2></div>
+    <a href="/analyses">Open full queue</a>
+  </div>
+  <div class="active-job-list">
+    {% for job in active_jobs %}
+    <a class="active-job" href="/analyses">
+      <span class="job-indicator {{ job.status|lower }}"></span>
+      <span class="active-job-name"><strong>{{ job.display_name }}</strong><small>{{ job.source_type }} · {{ job.created_at }}</small></span>
+      <span class="badge {{ job.status|lower }}">{{ job.status }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 <section class="dashboard-grid">
   <article class="dashboard-card quality-card">
     <div class="card-heading"><div><p class="eyebrow">Automatic analysis</p><h2>Track quality</h2></div><strong class="quality-rate">{{ track_counters.pass_pct }}%</strong></div>

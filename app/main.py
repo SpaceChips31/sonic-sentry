@@ -181,6 +181,17 @@ def dashboard(request: Request):
             if release.status in {"QUARANTINE", "REJECTED"}
         ][:6]
 
+        active_priority = case(
+            (AnalysisJob.status == "ANALYZING", 0),
+            else_=1,
+        )
+        active_jobs = session.scalars(
+            select(AnalysisJob)
+            .where(AnalysisJob.status.in_({"ANALYZING", "QUEUED"}))
+            .order_by(active_priority, AnalysisJob.id)
+            .limit(10)
+        ).all()
+
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
@@ -190,6 +201,7 @@ def dashboard(request: Request):
                 "track_counters": track_counters,
                 "job_counters": job_counters,
                 "attention_releases": attention_releases,
+                "active_jobs": active_jobs,
                 "has_active_jobs": bool(
                     job_counters.get("ANALYZING", 0)
                     or job_counters.get("QUEUED", 0)
