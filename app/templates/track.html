@@ -12,7 +12,7 @@
 {% block content %}
 <a class="back" href="/releases/{{ track.release.id }}">← {{ track.release.title }}</a>
 
-<section class="release-header">
+<section class="release-header status-accent {{ track.status|verdict_tone }}">
     <div>
         <p class="eyebrow">Forensic review</p>
         <h1 class="track-title">{{ track.display_path }}</h1>
@@ -20,7 +20,7 @@
     </div>
 
     <span class="badge large {{ track.status|lower }}">
-        {{ track.status }}
+        {{ track.status|human_status }}
     </span>
 </section>
 
@@ -34,12 +34,12 @@
             {{ "PASS" if track.integrity_ok else "FAILED" }}
         </strong>
     </article>
-    <article class="stat quarantine">
+    <article class="stat verdict-card {{ track.forensic_verdict|verdict_tone }}">
         <span>
             Forensic verdict
             {{ help("Valutazione automatica dello spettro. SUSPICIOUS indica un caso dubbio da revisionare, non una transcodifica certa.") }}
         </span>
-        <strong>{{ track.forensic_verdict or "—" }}</strong>
+        <strong>{{ track.forensic_verdict|human_verdict }}</strong>
     </article>
     <article class="stat">
         <span>
@@ -119,7 +119,7 @@
     <article class="panel detail-card">
         <h2>Automatic verdict</h2>
         <p class="verdict-text">
-            {{ spectral.get("primary_verdict") or track.forensic_verdict or "—" }}
+            {{ track.forensic_verdict|verdict_summary }}
         </p>
 
         <h3>Suspicious evidence</h3>
@@ -148,7 +148,7 @@
 <section class="review-box">
     <div>
         <p class="eyebrow">Human review</p>
-        <h2>{{ track.human_review }}</h2>
+        <h2>{{ track.human_review|human_review }}</h2>
         <p>
             The automatic forensic verdict remains unchanged regardless
             of the human decision.
