@@ -1,62 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Settings · Lossless Validator{% endblock %}
 {% block content %}
-<section class="page-heading">
-  <div>
-    <p class="eyebrow">Configuration</p>
-    <h1>Settings</h1>
-    <p class="heading-copy">Runtime configuration is supplied by Docker environment variables.</p>
-  </div>
-</section>
-
+<section class="page-heading"><div><p class="eyebrow">Configuration</p><h1>Settings</h1><p class="heading-copy">Docker defines the mounted storage; analysis sources can be managed here.</p></div></section>
 <section class="panel settings-panel">
-  <div class="settings-row">
-    <span>File operations</span>
-    <strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ 'ENABLED' if settings.enabled else 'DISABLED' }}</strong>
-  </div>
-  <div class="settings-row">
-    <span>Automatic routing</span>
-    <strong>{{ 'ENABLED' if settings.auto_route else 'MANUAL' }}</strong>
-  </div>
+  <div class="settings-row"><span>File operations</span><strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ 'ENABLED' if settings.enabled else 'DISABLED' }}</strong></div>
+  <div class="settings-row"><span>Automatic routing</span><strong>{{ 'ENABLED' if settings.auto_route else 'MANUAL' }}</strong></div>
 </section>
-
 <section class="settings-grid">
-  {% for name, item in [('Picard staging', settings.staging), ('Quarantine', settings.quarantine), ('Rejected', settings.rejected)] %}
-  <article class="panel settings-card">
-    <h2>{{ name }}</h2>
-    <code>{{ item.path }}</code>
-    <p>
-      <span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span>
-      <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span>
-    </p>
-  </article>
-  {% endfor %}
+{% for name, item in [('Picard staging', settings.staging), ('Quarantine', settings.quarantine), ('Rejected', settings.rejected)] %}
+<article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span></p></article>
+{% endfor %}
 </section>
-
-<section class="panel settings-panel">
-  <h2>Movable source roots</h2>
-  {% for item in settings.movable_roots %}
-  <div class="settings-row">
-    <code>{{ item.path }}</code>
-    <span>
-      <span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span>
-      <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span>
-    </span>
+<section class="panel settings-panel source-settings">
+  <div class="section-heading"><div><p class="eyebrow">New analysis</p><h2>Analysis sources</h2><p>Paths must already exist inside the container under <code>/data</code>.</p></div></div>
+  <div class="source-list">
+  {% for source in sources %}
+    <div class="source-item {{ 'disabled' if not source.enabled }}">
+      <span><strong>{{ source.name }}</strong><small>{{ source.kind }}</small><code>{{ source.path }}</code></span>
+      <span class="source-actions">
+        <form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ 'Disable' if source.enabled else 'Enable' }}</button></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm('Remove this source from the validator? No files will be deleted.')"><button class="button danger" type="submit">Remove</button></form>
+      </span>
+    </div>
+  {% else %}<p class="settings-warning">No analysis sources configured.</p>{% endfor %}
   </div>
-  {% else %}
-  <p class="settings-warning">No movable roots configured. File actions cannot run.</p>
-  {% endfor %}
+  <form class="source-form" method="post" action="/settings/sources">
+    <label>Name<input name="name" required placeholder="e.g. qBittorrent"></label>
+    <label>Type<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">Other</option></select></label>
+    <label class="source-path-input">Container path<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label>
+    <button class="button success" type="submit">Add source</button>
+  </form>
 </section>
-
-<section class="panel settings-help">
-  <h2>Docker variables</h2>
-  <dl>
-    <div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>Enable album-level filesystem actions.</dd></div>
-    <div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>Route albums automatically after analysis.</dd></div>
-    <div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>Colon-separated roots from which albums may be moved or deleted.</dd></div>
-    <div><dt>LOSSLESS_STAGING_ROOT</dt><dd>Destination consumed by MusicBrainz Picard.</dd></div>
-    <div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>Destination for albums requiring review.</dd></div>
-    <div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>Destination for rejected albums.</dd></div>
-  </dl>
-</section>
+<section class="panel settings-panel"><h2>Movable source roots</h2>{% for item in settings.movable_roots %}<div class="settings-row"><code>{{ item.path }}</code><span><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ 'FOUND' if item.exists else 'MISSING' }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ 'WRITABLE' if item.writable else 'READ ONLY' }}</span></span></div>{% else %}<p class="settings-warning">No movable roots configured. File actions cannot run.</p>{% endfor %}</section>
+<section class="panel settings-help"><h2>Docker variables</h2><dl><div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>Enable album-level filesystem actions.</dd></div><div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>Route albums automatically after analysis.</dd></div><div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>Colon-separated roots from which albums may be moved or deleted.</dd></div><div><dt>LOSSLESS_STAGING_ROOT</dt><dd>Destination consumed by MusicBrainz Picard.</dd></div><div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>Destination for albums requiring review.</dd></div><div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>Destination for rejected albums.</dd></div></dl></section>
 {% endblock %}
