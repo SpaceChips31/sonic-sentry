@@ -5,28 +5,69 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
-from app.models import Release
+from app.models import AnalysisSource, Release
+from app.presentation import configure_templates
 from app.services.file_workflow import (
     FileOperationError,
     delete_release_files,
     move_release,
     settings_snapshot,
 )
-from app.version import APP_VERSION
+from app.services.sources import SourceConfigurationError, add_source
 
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
-templates.env.globals["app_version"] = APP_VERSION
+templates = configure_templates(Jinja2Templates(directory="app/templates"))
 
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
+    with SessionLocal() as session:
+        sources = list(
+            session.scalars(
+                select(AnalysisSource).order_by(AnalysisSource.name, AnalysisSource.id)
+            ).all()
+        )
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
-        context={"settings": settings_snapshot()},
+        context={"settings": settings_snapshot(), "sources": sources},
     )
+
+
+@router.post("/settings/sources")
+def create_source(
+    name: str = Form(...),
+    path: str = Form(...),
+    kind: str = Form(...),
+):
+    try:
+        add_source(name, path, kind)
+    except SourceConfigurationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/sources/{source_id}/toggle")
+def toggle_source(source_id: int):
+    with SessionLocal() as session:
+        source = session.get(AnalysisSource, source_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        source.enabled = not source.enabled
+        session.commit()
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/sources/{source_id}/delete")
+def delete_source(source_id: int):
+    with SessionLocal() as session:
+        source = session.get(AnalysisSource, source_id)
+        if source is None:
+            raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        session.delete(source)
+        session.commit()
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/releases/{release_id}/files")
