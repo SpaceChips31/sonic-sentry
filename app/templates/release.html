@@ -5,7 +5,7 @@
 {% block content %}
 <a class="back" href="/">← Releases</a>
 
-<section class="release-header">
+<section class="release-header status-accent {{ release.status|verdict_tone }}">
     <div>
         <p class="eyebrow">Release</p>
         <h1>{{ release.title }}</h1>
@@ -13,7 +13,7 @@
     </div>
 
     <span class="badge large {{ release.status|lower }}">
-        {{ release.status }}
+        {{ release.status|human_status }}
     </span>
 </section>
 
@@ -91,15 +91,15 @@
             <tr class="{% if track.status != 'PASS' %}attention{% endif %}">
                 <td><a href="/tracks/{{ track.id }}">{{ track.display_path }}</a></td>
                 <td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td>
-                <td>{{ track.forensic_verdict or "—" }}</td>
+                <td><span class="verdict-label {{ track.forensic_verdict|verdict_tone }}">{{ track.forensic_verdict|human_verdict }}</span></td>
                 <td>
                     <span class="review-state {{ track.human_review|lower }}">
-                        {{ track.human_review }}
+                        {{ track.human_review|human_review }}
                     </span>
                 </td>
                 <td>
                     <span class="badge {{ track.status|lower }}">
-                        {{ track.status }}
+                        {{ track.status|human_status }}
                     </span>
                 </td>
             </tr>
