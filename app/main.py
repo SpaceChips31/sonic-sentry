@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
 from app.models import AnalysisJob, AnalysisSource, Release, Track
+from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
 from app.services.sources import seed_analysis_sources
@@ -350,6 +351,37 @@ def new_analysis(
     )
 
 
+@app.get("/api/sources/{source_id}/directories")
+def source_directories(
+    source_id: int,
+    path: str = "",
+    q: str = "",
+):
+    configured_source, current = resolve_source_directory(source_id, path)
+    root = Path(configured_source.path).resolve()
+    query = q.strip().casefold()
+
+    entries = sorted(
+        (item for item in current.iterdir() if item.is_dir()),
+        key=lambda item: item.name.casefold(),
+    )
+    if query:
+        entries = [item for item in entries if query in item.name.casefold()]
+
+    total = len(entries)
+    return {
+        "directories": [
+            {
+                "name": item.name,
+                "relative": str(item.relative_to(root)),
+            }
+            for item in entries[:200]
+        ],
+        "total": total,
+        "limited": total > 200,
+    }
+
+
 @app.post("/analyses/container")
 def create_container_analysis(
     source_id: int = Form(...),
@@ -376,6 +408,59 @@ def create_container_analysis(
         )
         session.add(job)
         session.commit()
+
+    return RedirectResponse("/analyses", status_code=303)
+
+@app.post("/analyses/batch")
+def create_batch_analysis(
+    source_id: int = Form(...),
+    relative_path: str = Form(...),
+):
+    configured_source, source = resolve_source_directory(source_id, relative_path)
+
+    try:
+        releases = discover_releases(source)
+    except BatchDiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not releases:
+        raise HTTPException(
+            status_code=400,
+            detail="No FLAC releases were found below the selected directory",
+        )
+
+    created = 0
+    with SessionLocal() as session:
+        active_paths = set(
+            session.scalars(
+                select(AnalysisJob.source_path).where(
+                    AnalysisJob.status.in_({"QUEUED", "ANALYZING"})
+                )
+            ).all()
+        )
+
+        for release_path in releases:
+            path_text = str(release_path)
+            if path_text in active_paths:
+                continue
+            session.add(
+                AnalysisJob(
+                    source_type=f"{configured_source.kind}_BATCH",
+                    source_path=path_text,
+                    display_name=release_path.name,
+                    status="QUEUED",
+                    created_at=utc_now(),
+                )
+            )
+            created += 1
+
+        session.commit()
+
+    if not created:
+        raise HTTPException(
+            status_code=409,
+            detail="All discovered releases are already queued or being analyzed",
+        )
 
     return RedirectResponse("/analyses", status_code=303)
 
