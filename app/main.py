@@ -16,6 +16,7 @@ from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
 from app.models import AnalysisJob, Release, Track
 from app.services.importer import import_report
+from app.version import APP_VERSION
 
 
 @asynccontextmanager
@@ -26,12 +27,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Lossless Validator",
-    version="0.1.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["app_version"] = APP_VERSION
 
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".flac",
@@ -468,4 +470,4 @@ def review_track(track_id: int, decision: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}

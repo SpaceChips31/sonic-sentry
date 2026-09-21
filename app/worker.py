@@ -2,7 +2,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.config import REPORT_ROOT
 from app.database import Base, SessionLocal, engine
@@ -11,6 +11,21 @@ from app.services.importer import import_report
 
 VALIDATOR = Path("/app/validator/validate_release.py")
 EXPECTED_EXIT_CODES = {0, 10, 20}
+
+
+def recover_interrupted_jobs() -> int:
+    """Return jobs interrupted by a previous worker shutdown to the queue."""
+    with SessionLocal() as session:
+        result = session.execute(
+            update(AnalysisJob)
+            .where(AnalysisJob.status == "ANALYZING")
+            .values(
+                status="QUEUED",
+                error="Recovered after worker restart",
+            )
+        )
+        session.commit()
+        return int(result.rowcount or 0)
 
 
 def claim_job():
@@ -91,7 +106,11 @@ def process_job(job):
 
 def main():
     Base.metadata.create_all(bind=engine)
-    print("Lossless Validator worker started", flush=True)
+    recovered = recover_interrupted_jobs()
+    print(
+        f"Lossless Validator worker started; recovered {recovered} job(s)",
+        flush=True,
+    )
 
     while True:
         job = claim_job()
