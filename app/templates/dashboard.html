@@ -53,7 +53,7 @@
 {% if attention_releases %}
 <section class="dashboard-section">
   <div class="section-heading"><div><p class="eyebrow">Needs attention</p><h2>Review these releases</h2></div></div>
-  <div class="attention-grid">{% for release in attention_releases %}<a class="attention-card" href="/releases/{{ release.id }}"><span><strong>{{ release.title }}</strong><small>{{ release.quarantine_tracks }} review · {{ release.rejected_tracks }} rejected</small></span><span class="badge {{ release.status|lower }}">{{ release.status }}</span></a>{% endfor %}</div>
+  <div class="attention-grid">{% for release in attention_releases %}<a class="attention-card" href="/releases/{{ release.id }}"><span><strong>{{ release.title }}</strong><small>{{ release.quarantine_tracks }} review · {{ release.rejected_tracks }} rejected</small></span><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></a>{% endfor %}</div>
 </section>
 {% endif %}
 <section class="dashboard-section" id="release-list">
@@ -61,7 +61,7 @@
   <div class="panel">
   {% if releases %}
     <table><thead><tr><th>Release</th><th>Tracks</th><th>Auto pass</th><th>Auto review</th><th>Auto rejected</th><th>Final status</th></tr></thead><tbody>
-    {% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a></td><td>{{ release.total_tracks }}</td><td>{{ release.pass_tracks }}</td><td>{{ release.quarantine_tracks }}</td><td>{{ release.rejected_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status }}</span></td></tr>{% endfor %}
+    {% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a></td><td>{{ release.total_tracks }}</td><td>{{ release.pass_tracks }}</td><td>{{ release.quarantine_tracks }}</td><td>{{ release.rejected_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
     </tbody></table>
   {% else %}
     <div class="empty"><h2>No analyses yet</h2><p>Add a release to the queue to populate the dashboard.</p><a class="button success" href="/analyses/new">Start first analysis</a></div>
