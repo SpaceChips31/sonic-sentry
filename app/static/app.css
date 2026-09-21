@@ -730,3 +730,145 @@ a.directory-row:hover {
 
 /* active-dashboard-jobs-v1 */
 .active-work-panel{margin-bottom:14px;padding:20px;border:1px solid rgba(85,183,255,.35);border-radius:8px;background:linear-gradient(135deg,rgba(85,183,255,.07),var(--surface) 55%)}.active-job-list{display:grid;gap:8px;margin-top:16px}.active-job{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:7px;align-items:center;background:var(--background);color:var(--text)}.active-job:hover{border-color:var(--accent);text-decoration:none}.job-indicator{width:9px;height:9px;border-radius:50%}.job-indicator.analyzing{background:var(--accent);box-shadow:0 0 0 5px rgba(85,183,255,.12)}.job-indicator.queued{background:#7aa7cc}.active-job-name{min-width:0}.active-job-name strong,.active-job-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active-job-name small{margin-top:2px;color:var(--muted)}
+
+/* desktop-audio-editor-theme-v1 */
+:root{
+    --background:#171a1d;
+    --surface:#252a2f;
+    --surface-raised:#30363c;
+    --border:#4a535c;
+    --text:#edf1f4;
+    --muted:#aab5bf;
+    --accent:#3e9ddd;
+    --pass:#4bc783;
+    --quarantine:#e4ad43;
+    --rejected:#ea6670
+}
+body{
+    background:#171a1d;
+    font:14px/1.42 Arial,Helvetica,sans-serif
+}
+.topbar{
+    height:50px;
+    padding:0 18px;
+    gap:10px;
+    border-bottom-color:#56616b;
+    background:#292e33;
+    box-shadow:inset 0 1px rgba(255,255,255,.05),0 1px 3px rgba(0,0,0,.35)
+}
+.brand{font-size:16px}.brand img{width:23px;height:23px}.version{font-size:12px}
+.main-nav{
+    gap:6px;
+    padding:4px;
+    border:1px solid #171a1d;
+    background:#202428
+}
+.main-nav a{
+    min-width:76px;
+    padding:6px 11px;
+    border:1px solid #56616b;
+    border-radius:2px;
+    background:#353b41;
+    color:var(--text);
+    text-align:center;
+    box-shadow:inset 0 1px rgba(255,255,255,.08)
+}
+.main-nav a:hover{
+    border-color:#72b9e8;
+    background:#3c454d;
+    color:#fff;
+    text-decoration:none
+}
+.main-nav a:active{
+    background:#23282d;
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.45)
+}
+.main-nav a:last-child{
+    border-color:#347caf;
+    background:#286f9f
+}
+.main-nav a:last-child:hover{background:#3386ba}
+.container{
+    width:min(1460px,calc(100% - 28px));
+    margin:24px auto
+}
+.page-heading,.release-header{margin-bottom:18px}
+h1{font-size:28px}
+.eyebrow{
+    margin-bottom:4px;
+    font-size:11px;
+    letter-spacing:.08em
+}
+.heading-copy{margin-top:4px}
+.stats{gap:8px;margin-bottom:12px}
+.stat{
+    padding:13px 15px;
+    border-radius:3px;
+    background:#252a2f;
+    box-shadow:inset 0 1px rgba(255,255,255,.035)
+}
+.stat strong{margin-top:2px;font-size:24px}
+.dashboard-grid{gap:8px;margin-bottom:20px}
+.dashboard-card{
+    padding:15px;
+    border-radius:3px;
+    background:#252a2f;
+    box-shadow:inset 0 1px rgba(255,255,255,.035)
+}
+.card-heading h2,.section-heading h2{font-size:19px}
+.quality-bar{
+    height:13px;
+    margin:16px 0 12px;
+    border:1px solid #111;
+    border-radius:1px
+}
+.compact-metrics{gap:6px;margin-top:15px}
+.compact-metrics div{
+    padding:9px;
+    border:1px solid #171a1d;
+    border-radius:2px;
+    background:#1d2125
+}
+.dashboard-section{margin-top:20px}
+.attention-grid{gap:7px}
+.attention-card{
+    padding:11px 13px;
+    border-radius:3px;
+    background:#252a2f
+}
+.panel,.queue-group,.detail-card,.review-box,.import-card,.browser-panel{
+    border-radius:3px;
+    background:#252a2f
+}
+th,td{padding:10px 12px}
+th{
+    background:#30363c;
+    color:#c1cbd3;
+    font-size:11px
+}
+.badge{border-radius:2px}
+.button{
+    border-radius:2px;
+    box-shadow:inset 0 1px rgba(255,255,255,.12)
+}
+.pipeline-state{
+    padding:7px 10px;
+    border-radius:2px;
+    background:#202428
+}
+.active-work-panel{
+    padding:15px;
+    border-radius:3px;
+    background:#252a2f
+}
+.active-job{
+    padding:9px 11px;
+    border-radius:2px;
+    background:#1d2125
+}
+@media(max-width:800px){
+    .topbar{height:auto;min-height:50px;flex-wrap:wrap;padding:9px 12px}
+    .main-nav{width:100%;order:3}
+    .main-nav a{flex:1;min-width:0}
+    .container{width:calc(100% - 16px);margin:16px auto}
+}
