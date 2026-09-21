@@ -9,7 +9,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, SOURCE_ROOTS, UPLOAD_ROOT
@@ -115,19 +115,85 @@ def dashboard(request: Request):
             select(Release).order_by(Release.id.desc())
         ).all()
 
-        counters = {
+        release_counters = {
             "total": len(releases),
             "pass": sum(r.status == "PASS" for r in releases),
             "quarantine": sum(r.status == "QUARANTINE" for r in releases),
             "rejected": sum(r.status == "REJECTED" for r in releases),
         }
 
+        track_row = session.execute(
+            select(
+                func.count(Track.id),
+                func.sum(case((Track.status == "PASS", 1), else_=0)),
+                func.sum(case((Track.status == "QUARANTINE", 1), else_=0)),
+                func.sum(case((Track.status == "REJECTED", 1), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            (Track.status == "QUARANTINE")
+                            & (Track.human_review == "NONE"),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case((Track.human_review == "APPROVED", 1), else_=0)
+                ),
+                func.sum(
+                    case((Track.human_review == "REJECTED", 1), else_=0)
+                ),
+            )
+        ).one()
+
+        track_counters = {
+            "total": int(track_row[0] or 0),
+            "pass": int(track_row[1] or 0),
+            "quarantine": int(track_row[2] or 0),
+            "rejected": int(track_row[3] or 0),
+            "pending_review": int(track_row[4] or 0),
+            "approved": int(track_row[5] or 0),
+            "human_rejected": int(track_row[6] or 0),
+        }
+
+        job_counters = {
+            status: count
+            for status, count in session.execute(
+                select(AnalysisJob.status, func.count(AnalysisJob.id))
+                .group_by(AnalysisJob.status)
+            )
+        }
+
+        track_counters["pass_pct"] = (
+            round(
+                track_counters["pass"]
+                / track_counters["total"]
+                * 100,
+                1,
+            )
+            if track_counters["total"]
+            else 0
+        )
+
+        attention_releases = [
+            release for release in releases
+            if release.status in {"QUARANTINE", "REJECTED"}
+        ][:6]
+
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
             context={
                 "releases": releases,
-                "counters": counters,
+                "release_counters": release_counters,
+                "track_counters": track_counters,
+                "job_counters": job_counters,
+                "attention_releases": attention_releases,
+                "has_active_jobs": bool(
+                    job_counters.get("ANALYZING", 0)
+                    or job_counters.get("QUEUED", 0)
+                ),
             },
         )
 
