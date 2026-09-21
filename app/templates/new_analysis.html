@@ -41,17 +41,102 @@
     {% if results_limited %}<strong>Showing the first 200 results. Refine the filter.</strong>{% endif %}
   </div>
   {% if relative_path %}
-  <form class="analyze-current" method="post" action="/analyses/container">
-    <input type="hidden" name="source_id" value="{{ source_id }}"><input type="hidden" name="relative_path" value="{{ relative_path }}">
-    <button class="button success" type="submit">Analyze current folder</button>
-  </form>
+  <div class="analysis-actions">
+    <form method="post" action="/analyses/container">
+      <input type="hidden" name="source_id" value="{{ source_id }}"><input type="hidden" name="relative_path" value="{{ relative_path }}">
+      <button class="button success" type="submit">Analyze this release</button>
+    </form>
+    <form method="post" action="/analyses/batch" onsubmit="return confirm('Search recursively and queue every FLAC album below this folder? Each album will be routed independently.')">
+      <input type="hidden" name="source_id" value="{{ source_id }}"><input type="hidden" name="relative_path" value="{{ relative_path }}">
+      <button class="button secondary" type="submit">Queue albums recursively</button>
+    </form>
+  </div>
+  <p class="batch-help">Use recursive mode on an artist folder or a mixed library. Conventional CD, Disc and Digital Media folders are grouped as one album.</p>
   {% endif %}
   {% if parent_path is not none %}<a class="directory-row" href="/analyses/new?source={{ source_id }}&path={{ parent_encoded }}"><span>📁 ..</span></a>{% endif %}
+  <div id="directory-results" data-source="{{ source_id }}" data-path="{{ relative_path }}">
   {% for directory in directories %}
   <a class="directory-row" href="/analyses/new?source={{ source_id }}&path={{ directory.encoded }}"><span>📁 {{ directory.name }}</span><span aria-hidden="true">→</span></a>
   {% else %}<div class="empty"><p>No folders found{% if query %} for this filter{% endif %}.</p></div>{% endfor %}
+  </div>
   {% else %}
   <div class="empty"><p>No analysis sources configured.</p><a class="button success" href="/settings">Configure a source</a></div>
   {% endif %}
 </section>
+{% if sources %}
+<script>
+(() => {
+  const input = document.querySelector('.browser-filter input[name="q"]');
+  const results = document.getElementById('directory-results');
+  const summary = document.querySelector('.browser-summary');
+  if (!input || !results) return;
+
+  let timer;
+  let controller;
+
+  function render(payload) {
+    results.replaceChildren();
+    if (!payload.directories.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.innerHTML = '<p>No folders found for this filter.</p>';
+      results.append(empty);
+    }
+
+    for (const directory of payload.directories) {
+      const link = document.createElement('a');
+      link.className = 'directory-row';
+      const params = new URLSearchParams({
+        source: results.dataset.source,
+        path: directory.relative
+      });
+      link.href = '/analyses/new?' + params.toString();
+
+      const label = document.createElement('span');
+      label.textContent = '📁 ' + directory.name;
+      const arrow = document.createElement('span');
+      arrow.textContent = '→';
+      arrow.setAttribute('aria-hidden', 'true');
+      link.append(label, arrow);
+      results.append(link);
+    }
+
+    summary.replaceChildren();
+    const count = document.createElement('span');
+    count.textContent = payload.total + (payload.total === 1 ? ' folder' : ' folders')
+      + (input.value.trim() ? ' matching “' + input.value.trim() + '”' : '');
+    summary.append(count);
+    if (payload.limited) {
+      const warning = document.createElement('strong');
+      warning.textContent = 'Showing the first 200 results. Keep typing to refine.';
+      summary.append(warning);
+    }
+  }
+
+  async function filterDirectories() {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    const params = new URLSearchParams({
+      path: results.dataset.path,
+      q: input.value.trim()
+    });
+    try {
+      const response = await fetch(
+        '/api/sources/' + results.dataset.source + '/directories?' + params.toString(),
+        {signal: controller.signal}
+      );
+      if (!response.ok) throw new Error('Filter request failed');
+      render(await response.json());
+    } catch (error) {
+      if (error.name !== 'AbortError') summary.textContent = 'Unable to update the folder list.';
+    }
+  }
+
+  input.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(filterDirectories, 180);
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
