@@ -3,11 +3,11 @@ services:
     environment:
       LOSSLESS_FILE_OPERATIONS: "${LOSSLESS_FILE_OPERATIONS:-true}"
       LOSSLESS_AUTO_ROUTE: "${LOSSLESS_AUTO_ROUTE:-true}"
-      LOSSLESS_SOURCE_ROOTS: /data/downloads/soulseek:/data/music/legacy
-      LOSSLESS_MOVABLE_ROOTS: /data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected
-      LOSSLESS_STAGING_ROOT: /data/music/validator/staging
-      LOSSLESS_QUARANTINE_ROOT: /data/music/validator/quarantine
-      LOSSLESS_REJECTED_ROOT: /data/music/validator/rejected
+      LOSSLESS_SOURCE_ROOTS: "${LOSSLESS_SOURCE_ROOTS:-/data/downloads/soulseek:/data/music/legacy}"
+      LOSSLESS_MOVABLE_ROOTS: "${LOSSLESS_MOVABLE_ROOTS:-/data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected}"
+      LOSSLESS_STAGING_ROOT: "${LOSSLESS_STAGING_ROOT:-/data/music/validator/staging}"
+      LOSSLESS_QUARANTINE_ROOT: "${LOSSLESS_QUARANTINE_ROOT:-/data/music/validator/quarantine}"
+      LOSSLESS_REJECTED_ROOT: "${LOSSLESS_REJECTED_ROOT:-/data/music/validator/rejected}"
     volumes:
       - "${MEDIA_ROOT:-/mnt/media}:/data"
 
@@ -15,10 +15,10 @@ services:
     environment:
       LOSSLESS_FILE_OPERATIONS: "${LOSSLESS_FILE_OPERATIONS:-true}"
       LOSSLESS_AUTO_ROUTE: "${LOSSLESS_AUTO_ROUTE:-true}"
-      LOSSLESS_SOURCE_ROOTS: /data/downloads/soulseek:/data/music/legacy
-      LOSSLESS_MOVABLE_ROOTS: /data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected
-      LOSSLESS_STAGING_ROOT: /data/music/validator/staging
-      LOSSLESS_QUARANTINE_ROOT: /data/music/validator/quarantine
-      LOSSLESS_REJECTED_ROOT: /data/music/validator/rejected
+      LOSSLESS_SOURCE_ROOTS: "${LOSSLESS_SOURCE_ROOTS:-/data/downloads/soulseek:/data/music/legacy}"
+      LOSSLESS_MOVABLE_ROOTS: "${LOSSLESS_MOVABLE_ROOTS:-/data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected}"
+      LOSSLESS_STAGING_ROOT: "${LOSSLESS_STAGING_ROOT:-/data/music/validator/staging}"
+      LOSSLESS_QUARANTINE_ROOT: "${LOSSLESS_QUARANTINE_ROOT:-/data/music/validator/quarantine}"
+      LOSSLESS_REJECTED_ROOT: "${LOSSLESS_REJECTED_ROOT:-/data/music/validator/rejected}"
     volumes:
       - "${MEDIA_ROOT:-/mnt/media}:/data"
