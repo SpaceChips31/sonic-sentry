@@ -23,8 +23,7 @@ LABEL org.opencontainers.image.title="Lossless Validator" \
       org.opencontainers.image.source="https://github.com/SpaceChips31/lossless-validator" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.created="${BUILD_DATE}"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
