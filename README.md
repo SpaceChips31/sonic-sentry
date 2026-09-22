@@ -54,7 +54,7 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.1.0`), the minor release
+Available release tags include the exact version (`0.1.1`), the minor release
 (`0.1`), and `latest`. Production deployments should prefer the exact
 version.
 
@@ -85,11 +85,11 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.1.0:
+For SonicSentry 0.1.1:
 
 ```env
 LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
-LOSSLESS_VALIDATOR_VERSION=0.1.0
+LOSSLESS_VALIDATOR_VERSION=0.1.1
 ```
 
 ## Local development
@@ -102,9 +102,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.1.0` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.1.1` runs the GitHub Actions
 publication workflow. It builds the image once and publishes the corresponding
-`0.1.0`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
+`0.1.1`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
 
 ## Exit statuses
 
