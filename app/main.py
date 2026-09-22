@@ -19,7 +19,7 @@ from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
 from app.services.sources import seed_analysis_sources
-from app.version import APP_VERSION
+from app.version import APP_NAME, APP_VERSION
 
 
 @asynccontextmanager
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Lossless Validator",
+    title=APP_NAME,
     version=APP_VERSION,
     lifespan=lifespan,
 )
