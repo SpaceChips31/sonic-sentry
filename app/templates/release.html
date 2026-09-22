@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ release.title }} · Lossless Validator{% endblock %}
+{% block title %}{{ release.title }} · {{ app_name }}{% endblock %}
 {% block content %}
 <a class="back" href="/">← {{ _('Releases') }}</a>
 <section class="release-header status-accent {{ release.status|verdict_tone }}"><div><p class="eyebrow">{{ _('Release') }}</p><h1>{{ release.title }}</h1><p class="source-path">{{ release.source_path }}</p></div><span class="badge large {{ release.status|lower }}">{{ release.status|human_status }}</span></section>
