@@ -562,3 +562,37 @@ input[type="file"] {
     outline: 1px solid var(--accent);
     outline-offset: 0;
 }
+
+
+/* localization-and-settings-clarity-v1 */
+.editable-settings {
+    margin-bottom: 10px;
+    border-left: 4px solid var(--accent);
+}
+.settings-readonly-heading {
+    margin: 20px 2px 8px;
+    padding-top: 12px;
+    border-top: 1px solid #555b61;
+}
+.settings-readonly-heading p { margin: 2px 0; color: var(--muted); }
+.settings-readonly-heading .eyebrow { color: #c4c9cd; }
+.language-form {
+    display: flex;
+    max-width: 520px;
+    gap: 7px;
+    align-items: center;
+}
+.language-form select {
+    flex: 1;
+    min-width: 220px;
+    padding: 7px 8px;
+    border: 1px solid #111315;
+    border-top-color: #1a1c1e;
+    border-left-color: #1a1c1e;
+    border-radius: 1px;
+    background: #202326;
+    color: var(--text);
+}
+@media (max-width: 600px) {
+    .language-form { align-items: stretch; flex-direction: column; }
+}
