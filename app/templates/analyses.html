@@ -2,7 +2,7 @@
 {% macro job_table(jobs) %}<div class="queue-table"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Release') }}</th><th>{{ _('Created') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
 {% for job in jobs %}<tr><td>{{ job.source_type }}</td><td title="{{ job.source_path }}">{{ job.display_name }}</td><td>{{ job.created_at }}</td><td><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span></td></tr>{% if job.error %}<tr class="job-error-row"><td colspan="4">{{ job.error }}</td></tr>{% endif %}{% endfor %}
 </tbody></table></div>{% endmacro %}
-{% block title %}{{ _('Analysis queue') }} · Lossless Validator{% endblock %}
+{% block title %}{{ _('Analysis queue') }} · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Analysis queue') }}</h1></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
 {% if has_active_jobs %}<div class="queue-live" role="status"><span class="live-dot"></span>{{ _('Live updates active · refreshing every 3 seconds') }}</div>{% endif %}
