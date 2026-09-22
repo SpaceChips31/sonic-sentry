@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
+from app.i18n import resolve_language
 from app.models import AnalysisSource, Release
 from app.presentation import configure_templates
 from app.services.file_workflow import (
@@ -31,8 +32,31 @@ def settings_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
-        context={"settings": settings_snapshot(), "sources": sources},
+        context={
+            "settings": settings_snapshot(),
+            "sources": sources,
+            "language_preference": request.cookies.get("lv_language", "auto"),
+            "effective_language": resolve_language(request),
+        },
     )
+
+
+@router.post("/settings/language")
+def set_language(language: str = Form(...)):
+    if language not in {"auto", "it", "en"}:
+        raise HTTPException(status_code=400, detail="Invalid language")
+    response = RedirectResponse("/settings", status_code=303)
+    if language == "auto":
+        response.delete_cookie("lv_language")
+    else:
+        response.set_cookie(
+            "lv_language",
+            language,
+            max_age=60 * 60 * 24 * 365,
+            httponly=True,
+            samesite="lax",
+        )
+    return response
 
 
 @router.post("/settings/sources")
