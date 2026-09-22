@@ -1,110 +1,23 @@
 {% extends "base.html" %}
-
 {% block title %}{{ release.title }} · Lossless Validator{% endblock %}
-
 {% block content %}
-<a class="back" href="/">← Releases</a>
-
-<section class="release-header status-accent {{ release.status|verdict_tone }}">
-    <div>
-        <p class="eyebrow">Release</p>
-        <h1>{{ release.title }}</h1>
-        <p class="source-path">{{ release.source_path }}</p>
-    </div>
-
-    <span class="badge large {{ release.status|lower }}">
-        {{ release.status|human_status }}
-    </span>
-</section>
-
+<a class="back" href="/">← {{ _('Releases') }}</a>
+<section class="release-header status-accent {{ release.status|verdict_tone }}"><div><p class="eyebrow">{{ _('Release') }}</p><h1>{{ release.title }}</h1><p class="source-path">{{ release.source_path }}</p></div><span class="badge large {{ release.status|lower }}">{{ release.status|human_status }}</span></section>
 <section class="stats">
-    <article class="stat">
-        <span>Total tracks</span>
-        <strong>{{ release.total_tracks }}</strong>
-    </article>
-    <article class="stat pass">
-        <span>Automatic pass</span>
-        <strong>{{ release.pass_tracks }}</strong>
-    </article>
-    <article class="stat quarantine">
-        <span>Automatic review</span>
-        <strong>{{ release.quarantine_tracks }}</strong>
-    </article>
-    <article class="stat rejected">
-        <span>Automatic rejected</span>
-        <strong>{{ release.rejected_tracks }}</strong>
-    </article>
+<article class="stat"><span>{{ _('Total tracks') }}</span><strong>{{ release.total_tracks }}</strong></article>
+<article class="stat pass"><span>{{ _('Automatic pass') }}</span><strong>{{ release.pass_tracks }}</strong></article>
+<article class="stat quarantine"><span>{{ _('Automatic review') }}</span><strong>{{ release.quarantine_tracks }}</strong></article>
+<article class="stat rejected"><span>{{ _('Automatic rejected') }}</span><strong>{{ release.rejected_tracks }}</strong></article>
 </section>
-
-<section class="panel release-actions">
-    <div>
-        <p class="eyebrow">Album workflow</p>
-        <h2>File actions</h2>
-        <p>Actions apply to the complete release directory. Existing destinations are never overwritten.</p>
-    </div>
-    {% if release.operations and release.operations[0].action == 'DELETE' %}
-    <span class="badge rejected">FILES DELETED</span>
-    {% else %}
-    <form method="post" action="/releases/{{ release.id }}/files">
-        <button class="button success" name="action" value="manual-pass" type="submit"
-                onclick="return confirm('Give this entire album a manual pass and move it to Picard staging?')">
-            Manual pass → staging
-        </button>
-        <button class="button secondary" name="action" value="quarantine" type="submit"
-                onclick="return confirm('Move this entire album to quarantine?')">
-            Move to quarantine
-        </button>
-        <button class="button danger" name="action" value="delete" type="submit"
-                onclick="return confirm('Permanently delete this entire album directory? This cannot be undone.')">
-            Delete album files
-        </button>
-    </form>
-    {% endif %}
-</section>
-
-{% if release.operations %}
-<section class="panel operation-history">
-    <h2>File history</h2>
-    {% for operation in release.operations %}
-    <div class="operation-row">
-        <strong>{{ operation.action.replace('_', ' ') }}</strong>
-        <span>{{ operation.created_at }}</span>
-        <code>{{ operation.source_path }}{% if operation.destination_path %} → {{ operation.destination_path }}{% endif %}</code>
-    </div>
-    {% endfor %}
-</section>
-{% endif %}
-
-<section class="panel">
-    <table>
-        <thead>
-            <tr>
-                <th>Track</th>
-                <th>Integrity</th>
-                <th>Forensic verdict</th>
-                <th>Review</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for track in release.tracks %}
-            <tr class="{% if track.status != 'PASS' %}attention{% endif %}">
-                <td><a href="/tracks/{{ track.id }}">{{ track.display_path }}</a></td>
-                <td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td>
-                <td><span class="verdict-label {{ track.forensic_verdict|verdict_tone }}">{{ track.forensic_verdict|human_verdict }}</span></td>
-                <td>
-                    <span class="review-state {{ track.human_review|lower }}">
-                        {{ track.human_review|human_review }}
-                    </span>
-                </td>
-                <td>
-                    <span class="badge {{ track.status|lower }}">
-                        {{ track.status|human_status }}
-                    </span>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</section>
+<section class="panel release-actions"><div><p class="eyebrow">{{ _('Album workflow') }}</p><h2>{{ _('File actions') }}</h2><p>{{ _('File actions help') }}</p></div>
+{% if release.operations and release.operations[0].action == 'DELETE' %}<span class="badge rejected">{{ _('Files deleted') }}</span>
+{% else %}<form method="post" action="/releases/{{ release.id }}/files">
+<button class="button success" name="action" value="manual-pass" type="submit" onclick="return confirm({{ _('Manual pass confirm')|tojson }})">{{ _('Manual pass → staging') }}</button>
+<button class="button secondary" name="action" value="quarantine" type="submit" onclick="return confirm({{ _('Quarantine confirm')|tojson }})">{{ _('Move to quarantine') }}</button>
+<button class="button danger" name="action" value="delete" type="submit" onclick="return confirm({{ _('Delete confirm')|tojson }})">{{ _('Delete album files') }}</button>
+</form>{% endif %}</section>
+{% if release.operations %}<section class="panel operation-history"><h2>{{ _('File history') }}</h2>{% for operation in release.operations %}<div class="operation-row"><strong>{{ operation.action.replace('_', ' ') }}</strong><span>{{ operation.created_at }}</span><code>{{ operation.source_path }}{% if operation.destination_path %} → {{ operation.destination_path }}{% endif %}</code></div>{% endfor %}</section>{% endif %}
+<section class="panel"><table><thead><tr><th>{{ _('Track') }}</th><th>{{ _('Integrity') }}</th><th>{{ _('Forensic verdict') }}</th><th>{{ _('Review') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
+{% for track in release.tracks %}<tr class="{% if track.status != 'PASS' %}attention{% endif %}"><td><a href="/tracks/{{ track.id }}">{{ track.display_path }}</a></td><td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td><td><span class="verdict-label {{ track.forensic_verdict|verdict_tone }}">{{ track.forensic_verdict|human_verdict }}</span></td><td><span class="review-state {{ track.human_review|lower }}">{{ track.human_review|human_review }}</span></td><td><span class="badge {{ track.status|lower }}">{{ track.status|human_status }}</span></td></tr>{% endfor %}
+</tbody></table></section>
 {% endblock %}
