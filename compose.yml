@@ -1,7 +1,7 @@
 name: sonic-sentry
 
 x-app: &app
-  image: "${LOSSLESS_VALIDATOR_IMAGE:-git.spacechips.it/chips/sonic-sentry}:${LOSSLESS_VALIDATOR_VERSION:-0.1.0}"
+  image: "${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}:${LOSSLESS_VALIDATOR_VERSION:-0.1.0}"
   user: "${PUID:-1000}:${PGID:-1000}"
   init: true
   restart: unless-stopped
