@@ -13,11 +13,17 @@ x-app: &app
     LOSSLESS_REPORT_ROOT: /app/reports
     LOSSLESS_UPLOAD_ROOT: /app/uploads
     LOSSLESS_SOURCE_ROOTS: "${LOSSLESS_SOURCE_ROOTS:-/data/downloads/soulseek:/data/music/legacy}"
+    LOSSLESS_FILE_OPERATIONS: "${LOSSLESS_FILE_OPERATIONS:-false}"
+    LOSSLESS_AUTO_ROUTE: "${LOSSLESS_AUTO_ROUTE:-false}"
+    LOSSLESS_MOVABLE_ROOTS: "${LOSSLESS_MOVABLE_ROOTS:-/data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected}"
+    LOSSLESS_STAGING_ROOT: "${LOSSLESS_STAGING_ROOT:-/data/music/validator/staging}"
+    LOSSLESS_QUARANTINE_ROOT: "${LOSSLESS_QUARANTINE_ROOT:-/data/music/validator/quarantine}"
+    LOSSLESS_REJECTED_ROOT: "${LOSSLESS_REJECTED_ROOT:-/data/music/validator/rejected}"
   volumes: &app-volumes
     - ./data:/app/data
     - ./reports:/app/reports
     - ./uploads:/app/uploads
-    - "${MEDIA_ROOT:-/mnt/media}:/data:ro"
+    - "${MEDIA_ROOT:-/mnt/media}:/data"
 
 services:
   web:
