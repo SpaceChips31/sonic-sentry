@@ -16,7 +16,7 @@
 </section>
 
 <section class="panel settings-panel source-settings">
-  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Analysis sources') }}</h2><p>{{ _('Analysis sources help') }}</p></div></div>
+  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Folders to analyze') }}</h2><p>{{ _('Folders to analyze help') }}</p></div></div>
   <div class="source-list">
   {% for source in sources %}
     <div class="source-item {{ 'disabled' if not source.enabled }}">
@@ -36,23 +36,23 @@
   </form>
 </section>
 
-<section class="settings-readonly-heading"><p class="eyebrow">{{ _('Read-only runtime configuration') }}</p><p>{{ _('Docker read-only help') }}</p></section>
+<section class="settings-readonly-heading"><p class="eyebrow">{{ _('Album destinations and automation') }}</p><p>{{ _('Album destinations help') }}</p></section>
 <section class="panel settings-panel">
-  <div class="settings-row"><span>{{ _('File operations') }}</span><strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ _('Enabled') if settings.enabled else _('Disabled') }}</strong></div>
-  <div class="settings-row"><span>{{ _('Automatic routing') }}</span><strong>{{ _('Enabled') if settings.auto_route else _('Manual') }}</strong></div>
+  <div class="settings-row"><span>{{ _('Allow album moves') }}</span><strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ _('Enabled') if settings.enabled else _('Disabled') }}</strong></div>
+  <div class="settings-row"><span>{{ _('Move albums automatically after analysis') }}</span><strong>{{ _('Enabled') if settings.auto_route else _('Manual') }}</strong></div>
 </section>
 <section class="settings-grid">
 {% for name, item in [(_('Picard staging'), settings.staging), (_('Quarantine'), settings.quarantine), (_('Rejected'), settings.rejected)] %}
 <article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>
 {% endfor %}
 </section>
-<section class="panel settings-panel"><h2>{{ _('Movable source roots') }}</h2>{% for item in settings.movable_roots %}<div class="settings-row"><code>{{ item.path }}</code><span><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></span></div>{% else %}<p class="settings-warning">{{ _('No movable roots configured. File actions cannot run.') }}</p>{% endfor %}</section>
-<section class="panel settings-help"><h2>{{ _('Docker variables') }}</h2><dl>
-<div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>{{ _('File operations') }}</dd></div>
-<div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>{{ _('Automatic routing') }}</dd></div>
-<div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>{{ _('Movable source roots') }}</dd></div>
-<div><dt>LOSSLESS_STAGING_ROOT</dt><dd>{{ _('Picard staging') }}</dd></div>
-<div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>{{ _('Quarantine') }}</dd></div>
-<div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>{{ _('Rejected') }}</dd></div>
-</dl></section>
+<section class="panel settings-panel"><h2>{{ _('Authorized source folders') }}</h2><p class="settings-explanation">{{ _('Authorized source folders help') }}</p>{% for item in settings.movable_roots %}<div class="settings-row"><code>{{ item.path }}</code><span><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></span></div>{% else %}<p class="settings-warning">{{ _('No authorized source folders') }}</p>{% endfor %}</section>
+<details class="panel settings-help settings-advanced"><summary><strong>{{ _('Advanced technical settings') }}</strong><span>{{ _('Advanced technical settings help') }}</span></summary><dl>
+<div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>{{ _('Allow album moves') }}</dd></div>
+<div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>{{ _('Move albums automatically after analysis') }}</dd></div>
+<div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>{{ _('Authorized source folders') }}</dd></div>
+<div><dt>LOSSLESS_STAGING_ROOT</dt><dd>{{ _('Approved albums (Picard)') }}</dd></div>
+<div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>{{ _('Albums to review') }}</dd></div>
+<div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>{{ _('Rejected albums') }}</dd></div>
+</dl></details>
 {% endblock %}
