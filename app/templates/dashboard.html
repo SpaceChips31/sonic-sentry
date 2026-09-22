@@ -1,71 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · Lossless Validator{% if has_active_jobs %}
-<script>window.setTimeout(() => window.location.reload(), 5000);</script>
-{% endif %}
-{% endblock %}
+{% block title %}{{ _('Dashboard') }} · Lossless Validator{% endblock %}
 {% block content %}
-<section class="page-heading dashboard-heading">
-  <div><p class="eyebrow">Music pipeline</p><h1>Dashboard</h1><p class="heading-copy">Quality overview and analysis activity across the indexed library.</p></div>
-  <div class="heading-actions">
-    {% if has_active_jobs %}<a class="pipeline-state active" href="/analyses"><span class="live-dot"></span> Pipeline active</a>{% else %}<a class="pipeline-state" href="/analyses">Pipeline idle</a>{% endif %}
-    <a class="button success" href="/analyses/new">New analysis</a>
-  </div>
-</section>
+<section class="page-heading dashboard-heading"><div><p class="eyebrow">{{ _('Music pipeline') }}</p><h1>{{ _('Dashboard') }}</h1><p class="heading-copy">{{ _('Quality overview and analysis activity across the indexed library.') }}</p></div><div class="heading-actions">{% if has_active_jobs %}<a class="pipeline-state active" href="/analyses"><span class="live-dot"></span>{{ _('Pipeline active') }}</a>{% else %}<a class="pipeline-state" href="/analyses">{{ _('Pipeline idle') }}</a>{% endif %}<a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></div></section>
 <section class="stats dashboard-stats">
-  <article class="stat"><span>Analysed releases</span><strong>{{ release_counters.total }}</strong><small>{{ track_counters.total }} tracks indexed</small></article>
-  <article class="stat pass"><span>Clean tracks</span><strong>{{ track_counters.pass }}</strong><small>{{ track_counters.pass_pct }}% automatic pass rate</small></article>
-  <article class="stat quarantine"><span>Awaiting review</span><strong>{{ track_counters.pending_review }}</strong><small>{{ release_counters.quarantine }} quarantined releases</small></article>
-  <article class="stat rejected"><span>Rejected releases</span><strong>{{ release_counters.rejected }}</strong><small>{{ track_counters.rejected }} integrity failures</small></article>
+<article class="stat"><span>{{ _('Analysed releases') }}</span><strong>{{ release_counters.total }}</strong><small>{{ track_counters.total }} {{ _('tracks indexed') }}</small></article>
+<article class="stat pass"><span>{{ _('Clean tracks') }}</span><strong>{{ track_counters.pass }}</strong><small>{{ track_counters.pass_pct }}% {{ _('automatic pass rate') }}</small></article>
+<article class="stat quarantine"><span>{{ _('Awaiting review') }}</span><strong>{{ track_counters.pending_review }}</strong><small>{{ release_counters.quarantine }} {{ _('quarantined releases') }}</small></article>
+<article class="stat rejected"><span>{{ _('Rejected releases') }}</span><strong>{{ release_counters.rejected }}</strong><small>{{ track_counters.rejected }} {{ _('integrity failures') }}</small></article>
 </section>
-{% if active_jobs %}
-<section class="active-work-panel">
-  <div class="section-heading">
-    <div><p class="eyebrow">Currently processing</p><h2>Active work</h2></div>
-    <a href="/analyses">Open full queue</a>
-  </div>
-  <div class="active-job-list">
-    {% for job in active_jobs %}
-    <a class="active-job" href="/analyses">
-      <span class="job-indicator {{ job.status|lower }}"></span>
-      <span class="active-job-name"><strong>{{ job.display_name }}</strong><small>{{ job.source_type }} · {{ job.created_at }}</small></span>
-      <span class="badge {{ job.status|lower }}">{{ job.status }}</span>
-    </a>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
+{% if active_jobs %}<section class="active-work-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Currently processing') }}</p><h2>{{ _('Active work') }}</h2></div><a href="/analyses">{{ _('Open full queue') }}</a></div><div class="active-job-list">{% for job in active_jobs %}<a class="active-job" href="/analyses"><span class="job-indicator {{ job.status|lower }}"></span><span class="active-job-name"><strong>{{ job.display_name }}</strong><small>{{ job.source_type }} · {{ job.created_at }}</small></span><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span></a>{% endfor %}</div></section>{% endif %}
 <section class="dashboard-grid">
-  <article class="dashboard-card quality-card">
-    <div class="card-heading"><div><p class="eyebrow">Automatic analysis</p><h2>Track quality</h2></div><strong class="quality-rate">{{ track_counters.pass_pct }}%</strong></div>
-    {% set total = track_counters.total or 1 %}
-    <div class="quality-bar" aria-label="Track verdict distribution"><span class="quality-pass" style="width: {{ track_counters.pass / total * 100 }}%"></span><span class="quality-review" style="width: {{ track_counters.quarantine / total * 100 }}%"></span><span class="quality-rejected" style="width: {{ track_counters.rejected / total * 100 }}%"></span></div>
-    <div class="metric-list"><div><span class="metric-dot pass"></span>Passed <strong>{{ track_counters.pass }}</strong></div><div><span class="metric-dot quarantine"></span>Quarantine <strong>{{ track_counters.quarantine }}</strong></div><div><span class="metric-dot rejected"></span>Rejected <strong>{{ track_counters.rejected }}</strong></div></div>
-  </article>
-  <article class="dashboard-card">
-    <div class="card-heading"><div><p class="eyebrow">Human decisions</p><h2>Review workload</h2></div><a href="#release-list">View releases</a></div>
-    <div class="compact-metrics"><div><span>Pending</span><strong class="text-quarantine">{{ track_counters.pending_review }}</strong></div><div><span>Approved</span><strong class="text-pass">{{ track_counters.approved }}</strong></div><div><span>Rejected</span><strong class="text-rejected">{{ track_counters.human_rejected }}</strong></div></div>
-  </article>
-  <article class="dashboard-card">
-    <div class="card-heading"><div><p class="eyebrow">Worker pipeline</p><h2>Analysis queue</h2></div><a href="/analyses">Open queue</a></div>
-    <div class="compact-metrics"><div><span>Analyzing</span><strong>{{ job_counters.get("ANALYZING", 0) }}</strong></div><div><span>Queued</span><strong>{{ job_counters.get("QUEUED", 0) }}</strong></div><div><span>Failed</span><strong class="text-rejected">{{ job_counters.get("FAILED", 0) }}</strong></div></div>
-  </article>
+<article class="dashboard-card quality-card"><div class="card-heading"><div><p class="eyebrow">{{ _('Automatic analysis') }}</p><h2>{{ _('Track quality') }}</h2></div><strong class="quality-rate">{{ track_counters.pass_pct }}%</strong></div>{% set total = track_counters.total or 1 %}<div class="quality-bar"><span class="quality-pass" style="width:{{ track_counters.pass/total*100 }}%"></span><span class="quality-review" style="width:{{ track_counters.quarantine/total*100 }}%"></span><span class="quality-rejected" style="width:{{ track_counters.rejected/total*100 }}%"></span></div><div class="metric-list"><div><span class="metric-dot pass"></span>{{ _('Passed') }} <strong>{{ track_counters.pass }}</strong></div><div><span class="metric-dot quarantine"></span>{{ _('Quarantine') }} <strong>{{ track_counters.quarantine }}</strong></div><div><span class="metric-dot rejected"></span>{{ _('Rejected') }} <strong>{{ track_counters.rejected }}</strong></div></div></article>
+<article class="dashboard-card"><div class="card-heading"><div><p class="eyebrow">{{ _('Human decisions') }}</p><h2>{{ _('Review workload') }}</h2></div><a href="#release-list">{{ _('View releases') }}</a></div><div class="compact-metrics"><div><span>{{ _('Pending') }}</span><strong class="text-quarantine">{{ track_counters.pending_review }}</strong></div><div><span>{{ _('Approved') }}</span><strong class="text-pass">{{ track_counters.approved }}</strong></div><div><span>{{ _('Rejected') }}</span><strong class="text-rejected">{{ track_counters.human_rejected }}</strong></div></div></article>
+<article class="dashboard-card"><div class="card-heading"><div><p class="eyebrow">{{ _('Worker pipeline') }}</p><h2>{{ _('Analysis queue') }}</h2></div><a href="/analyses">{{ _('Open queue') }}</a></div><div class="compact-metrics"><div><span>{{ _('Analyzing') }}</span><strong>{{ job_counters.get("ANALYZING",0) }}</strong></div><div><span>{{ _('Queued') }}</span><strong>{{ job_counters.get("QUEUED",0) }}</strong></div><div><span>{{ _('Failed') }}</span><strong class="text-rejected">{{ job_counters.get("FAILED",0) }}</strong></div></div></article>
 </section>
-{% if attention_releases %}
-<section class="dashboard-section">
-  <div class="section-heading"><div><p class="eyebrow">Needs attention</p><h2>Review these releases</h2></div></div>
-  <div class="attention-grid">{% for release in attention_releases %}<a class="attention-card" href="/releases/{{ release.id }}"><span><strong>{{ release.title }}</strong><small>{{ release.quarantine_tracks }} review · {{ release.rejected_tracks }} rejected</small></span><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></a>{% endfor %}</div>
-</section>
-{% endif %}
-<section class="dashboard-section" id="release-list">
-  <div class="section-heading"><div><p class="eyebrow">Library history</p><h2>All releases</h2></div><span class="section-count">{{ release_counters.total }} total</span></div>
-  <div class="panel">
-  {% if releases %}
-    <table><thead><tr><th>Release</th><th>Tracks</th><th>Auto pass</th><th>Auto review</th><th>Auto rejected</th><th>Final status</th></tr></thead><tbody>
-    {% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a></td><td>{{ release.total_tracks }}</td><td>{{ release.pass_tracks }}</td><td>{{ release.quarantine_tracks }}</td><td>{{ release.rejected_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
-    </tbody></table>
-  {% else %}
-    <div class="empty"><h2>No analyses yet</h2><p>Add a release to the queue to populate the dashboard.</p><a class="button success" href="/analyses/new">Start first analysis</a></div>
-  {% endif %}
-  </div>
-</section>
+{% if attention_releases %}<section class="dashboard-section"><div class="section-heading"><div><p class="eyebrow">{{ _('Needs attention') }}</p><h2>{{ _('Review these releases') }}</h2></div></div><div class="attention-grid">{% for release in attention_releases %}<a class="attention-card" href="/releases/{{ release.id }}"><span><strong>{{ release.title }}</strong><small>{{ release.quarantine_tracks }} {{ _('Review')|lower }} · {{ release.rejected_tracks }} {{ _('Rejected')|lower }}</small></span><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></a>{% endfor %}</div></section>{% endif %}
+<section class="dashboard-section" id="release-list"><div class="section-heading"><div><p class="eyebrow">{{ _('Library history') }}</p><h2>{{ _('All releases') }}</h2></div><span class="section-count">{{ release_counters.total }} {{ _('total') }}</span></div><div class="panel">{% if releases %}<table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Tracks') }}</th><th>{{ _('Auto pass') }}</th><th>{{ _('Auto review') }}</th><th>{{ _('Auto rejected') }}</th><th>{{ _('Final status') }}</th></tr></thead><tbody>{% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a></td><td>{{ release.total_tracks }}</td><td>{{ release.pass_tracks }}</td><td>{{ release.quarantine_tracks }}</td><td>{{ release.rejected_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty"><h2>{{ _('No analyses yet') }}</h2><p>{{ _('Add a release to the queue to populate the dashboard.') }}</p><a class="button success" href="/analyses/new">{{ _('Start first analysis') }}</a></div>{% endif %}</div></section>
+{% if has_active_jobs %}<script>window.setTimeout(() => window.location.reload(),5000);</script>{% endif %}
 {% endblock %}
