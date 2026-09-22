@@ -18,8 +18,8 @@ ARG VERSION=0.1.0
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
-LABEL org.opencontainers.image.title="Lossless Validator" \
-      org.opencontainers.image.description="Web interface and worker for FLAC integrity and forensic analysis" \
+LABEL org.opencontainers.image.title="SonicSentry" \
+      org.opencontainers.image.description="Audio quality gate for FLAC integrity and forensic analysis" \
       org.opencontainers.image.source="https://github.com/SpaceChips31/lossless-validator" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
