@@ -58,8 +58,7 @@ Available release tags include the exact version (`0.1.0`), the minor release
 (`0.1`), and `latest`. Production deployments should prefer the exact
 version.
 
-If the GitHub Container Registry package is private, authenticate once before
-pulling:
+For a private fork or private package, authenticate before pulling:
 
 ```sh
 docker login ghcr.io
@@ -121,6 +120,18 @@ The command-line validator returns:
 The tested engine and its Python dependencies are stored under
 `vendor/audio-forensic`. Provenance is documented in
 `vendor/audio-forensic/SOURCE.md`.
+
+## License and attribution
+
+SonicSentry is released under the [MIT License](LICENSE). You may use, modify,
+redistribute, and use it commercially, provided that the copyright and license
+notice are retained.
+
+The vendored `audio-forensic` engine is copyright Bishal Das and is also
+licensed under MIT. SonicSentry additionally uses third-party Python packages
+and separate audio command-line tools under their own licenses. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources, licenses, and
+attributions.
 
 ## Roadmap
 
