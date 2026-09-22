@@ -20,7 +20,7 @@ ARG BUILD_DATE=unknown
 
 LABEL org.opencontainers.image.title="SonicSentry" \
       org.opencontainers.image.description="Audio quality gate for FLAC integrity and forensic analysis" \
-      org.opencontainers.image.source="https://github.com/SpaceChips31/lossless-validator" \
+      org.opencontainers.image.source="https://github.com/SpaceChips31/sonic-sentry" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}"
