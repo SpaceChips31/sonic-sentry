@@ -14,7 +14,7 @@ RUN python -m pip wheel \
 
 FROM python:3.13-slim
 
-ARG VERSION=0.1.0
+ARG VERSION=0.1.1
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
