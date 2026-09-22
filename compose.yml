@@ -1,7 +1,7 @@
-name: lossless-validator
+name: sonic-sentry
 
 x-app: &app
-  image: "${LOSSLESS_VALIDATOR_IMAGE:-git.spacechips.it/chips/lossless-validator}:${LOSSLESS_VALIDATOR_VERSION:-0.1.0}"
+  image: "${LOSSLESS_VALIDATOR_IMAGE:-git.spacechips.it/chips/sonic-sentry}:${LOSSLESS_VALIDATOR_VERSION:-0.1.0}"
   user: "${PUID:-1000}:${PGID:-1000}"
   init: true
   restart: unless-stopped
@@ -22,7 +22,7 @@ x-app: &app
 services:
   web:
     <<: *app
-    container_name: lossless-validator-web
+    container_name: sonic-sentry-web
     ports:
       - "${LOSSLESS_VALIDATOR_PORT:-8090}:8090"
     healthcheck:
@@ -39,6 +39,6 @@ services:
 
   worker:
     <<: *app
-    container_name: lossless-validator-worker
+    container_name: sonic-sentry-worker
     command: ["python", "-m", "app.worker"]
     stop_grace_period: 30s
