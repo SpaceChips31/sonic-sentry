@@ -121,3 +121,8 @@ The command-line validator returns:
 The tested engine and its Python dependencies are stored under
 `vendor/audio-forensic`. Provenance is documented in
 `vendor/audio-forensic/SOURCE.md`.
+
+## Roadmap
+
+Planned post-0.1 work, including optional local authentication, is tracked in
+[ROADMAP.md](ROADMAP.md).
