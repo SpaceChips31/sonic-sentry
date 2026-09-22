@@ -1,27 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ current_language() }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Lossless Validator{% endblock %}</title>
     <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml">
     <link rel="stylesheet" href="/static/app.css?v=3">
-    <link rel="stylesheet" href="/static/desktop.css?v=7">
+    <link rel="stylesheet" href="/static/desktop.css?v=8">
 </head>
 <body>
-    <header class="topbar">
-        <a class="brand" href="/"><img src="/static/favicon.svg?v=2" alt="">Lossless Validator</a>
-        <span class="version">v{{ app_version }}</span>
-        <nav class="main-nav" aria-label="Main navigation">
-            <a href="/">Dashboard</a>
-            <a href="/analyses">Queue</a>
-            <a href="/settings">Settings</a>
-            <a class="nav-primary" href="/analyses/new">New analysis</a>
-        </nav>
-    </header>
-
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
+<header class="topbar">
+    <a class="brand" href="/"><img src="/static/favicon.svg?v=2" alt="">Lossless Validator</a>
+    <span class="version">v{{ app_version }}</span>
+    <nav class="main-nav" aria-label="{{ _('Main navigation') }}">
+        <a href="/">{{ _('Dashboard') }}</a>
+        <a href="/analyses">{{ _('Queue') }}</a>
+        <a href="/settings">{{ _('Settings') }}</a>
+        <a class="nav-primary" href="/analyses/new">{{ _('New analysis') }}</a>
+    </nav>
+</header>
+<main class="container">{% block content %}{% endblock %}</main>
 </body>
 </html>
