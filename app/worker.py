@@ -116,7 +116,7 @@ def main():
     Base.metadata.create_all(bind=engine)
     recovered = recover_interrupted_jobs()
     print(
-        f"Lossless Validator worker started; recovered {recovered} job(s)",
+        f"SonicSentry worker started; recovered {recovered} job(s)",
         flush=True,
     )
 
