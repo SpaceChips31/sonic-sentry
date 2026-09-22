@@ -1,0 +1,18 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.1.0-dev}"
+        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
+        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
+    image: spacechips/sonic-sentry:dev
+
+  worker:
+    build:
+      context: .
+      args:
+        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.1.0-dev}"
+        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
+        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
+    image: spacechips/sonic-sentry:dev

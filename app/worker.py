@@ -2,15 +2,31 @@ import subprocess
 import time
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.config import REPORT_ROOT
 from app.database import Base, SessionLocal, engine
 from app.models import AnalysisJob
 from app.services.importer import import_report
+from app.services.file_workflow import auto_route_release
 
 VALIDATOR = Path("/app/validator/validate_release.py")
 EXPECTED_EXIT_CODES = {0, 10, 20}
+
+
+def recover_interrupted_jobs() -> int:
+    """Return jobs interrupted by a previous worker shutdown to the queue."""
+    with SessionLocal() as session:
+        result = session.execute(
+            update(AnalysisJob)
+            .where(AnalysisJob.status == "ANALYZING")
+            .values(
+                status="QUEUED",
+                error="Recovered after worker restart",
+            )
+        )
+        session.commit()
+        return int(result.rowcount or 0)
 
 
 def claim_job():
@@ -76,9 +92,16 @@ def process_job(job):
 
         release = import_report(report)
 
+        destination = auto_route_release(release.id)
+
         print(
             f"Job {job_id} completed: "
-            f"release #{release.id} [{release.status}]",
+            f"release #{release.id} [{release.status}]"
+            + (
+                f" -> {destination}"
+                if destination is not None
+                else ""
+            ),
             flush=True,
         )
 
@@ -91,7 +114,11 @@ def process_job(job):
 
 def main():
     Base.metadata.create_all(bind=engine)
-    print("Lossless Validator worker started", flush=True)
+    recovered = recover_interrupted_jobs()
+    print(
+        f"SonicSentry worker started; recovered {recovered} job(s)",
+        flush=True,
+    )
 
     while True:
         job = claim_job()

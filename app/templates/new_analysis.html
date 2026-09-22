@@ -1,131 +1,34 @@
 {% extends "base.html" %}
-
-{% block title %}New analysis · Lossless Validator{% endblock %}
-
+{% block title %}{{ _('New analysis') }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-heading">
-    <div>
-        <p class="eyebrow">Import</p>
-        <h1>New analysis</h1>
-    </div>
-</section>
-
+<section class="page-heading"><div><p class="eyebrow">{{ _('Import') }}</p><h1>{{ _('New analysis') }}</h1></div></section>
 <section class="import-grid">
-    <article class="panel import-card">
-        <h2>Upload from device</h2>
-        <p>
-            Select individual FLAC files or an entire release folder.
-            Artwork, CUE and ripping logs are preserved.
-        </p>
-
-        <form method="post"
-              action="/analyses/upload"
-              enctype="multipart/form-data">
-            <label>Individual files</label>
-            <input type="file"
-                   name="files"
-                   multiple
-                   accept=".flac,.cue,.log,.jpg,.jpeg,.png,.txt,.m3u,.m3u8">
-
-            <label>Complete folder</label>
-            <input type="file"
-                   name="files"
-                   multiple
-                   webkitdirectory
-                   directory>
-
-            <button class="button success" type="submit">
-                Add to queue
-            </button>
-        </form>
-    </article>
-
-    <article class="panel import-card">
-        <h2>Existing report</h2>
-        <p>
-            Import a JSON report previously produced by the validator.
-            No audio analysis will be repeated.
-        </p>
-
-        <form method="post"
-              action="/analyses/report"
-              enctype="multipart/form-data">
-            <label>Validator report</label>
-            <input type="file"
-                   name="report"
-                   required
-                   accept=".json,application/json">
-
-            <button class="button secondary" type="submit">
-                Import report
-            </button>
-        </form>
-    </article>
+<article class="panel import-card"><h2>{{ _('Upload from device') }}</h2><p>{{ _('Upload help') }}</p><form method="post" action="/analyses/upload" enctype="multipart/form-data"><label>{{ _('Individual files') }}</label><input type="file" name="files" multiple accept=".flac,.cue,.log,.jpg,.jpeg,.png,.txt,.m3u,.m3u8"><label>{{ _('Complete folder') }}</label><input type="file" name="files" multiple webkitdirectory directory><button class="button success" type="submit">{{ _('Add to queue') }}</button></form></article>
+<article class="panel import-card"><h2>{{ _('Existing report') }}</h2><p>{{ _('Existing report help') }}</p><form method="post" action="/analyses/report" enctype="multipart/form-data"><label>{{ _('Validator report') }}</label><input type="file" name="report" required accept=".json,application/json"><button class="button secondary" type="submit">{{ _('Import report') }}</button></form></article>
 </section>
-
 <section class="panel browser-panel">
-    <div class="browser-heading">
-        <div>
-            <h2>Browse container</h2>
-            <p>Select a release from an authorized mounted directory.</p>
-        </div>
-
-        <a href="/analyses">View queue →</a>
-    </div>
-
-    {% if roots %}
-    <nav class="source-roots">
-        {% for item in roots %}
-        <a class="{% if item.index == root_index %}active{% endif %}"
-           href="/analyses/new?root={{ item.index }}">
-            {{ item.name }}
-        </a>
-        {% endfor %}
-    </nav>
-
-    <div class="current-path">
-        {{ current }}
-    </div>
-
-    {% if relative_path %}
-    <form class="analyze-current"
-          method="post"
-          action="/analyses/container">
-        <input type="hidden"
-               name="root_index"
-               value="{{ root_index }}">
-        <input type="hidden"
-               name="relative_path"
-               value="{{ relative_path }}">
-
-        <button class="button success" type="submit">
-            Analyze current folder
-        </button>
-    </form>
-    {% endif %}
-
-    {% if parent_path is not none %}
-    <a class="directory-row"
-       href="/analyses/new?root={{ root_index }}&path={{ parent_encoded }}">
-        <span>📁 ..</span>
-    </a>
-    {% endif %}
-
-    {% for directory in directories %}
-    <a class="directory-row"
-       href="/analyses/new?root={{ root_index }}&path={{ directory.encoded }}">
-        <span>📁 {{ directory.name }}</span>
-        <span aria-hidden="true">→</span>
-    </a>
-    {% else %}
-    <div class="empty">
-        <p>No subdirectories found.</p>
-    </div>
-    {% endfor %}
-    {% else %}
-    <div class="empty">
-        <p>No source roots configured.</p>
-    </div>
-    {% endif %}
+<div class="browser-heading"><div><h2>{{ _('Browse sources') }}</h2><p>{{ _('Browse sources help') }}</p></div><a href="/analyses">{{ _('View queue →') }}</a></div>
+{% if sources %}
+<nav class="source-roots">{% for item in sources %}<a class="{% if item.id == source_id %}active{% endif %}" href="/analyses/new?source={{ item.id }}">{{ item.name }} <small>{{ item.kind }}</small></a>{% endfor %}</nav>
+<div class="current-path">{{ current }}</div>
+<form class="browser-filter" method="get" action="/analyses/new"><input type="hidden" name="source" value="{{ source_id }}"><input type="hidden" name="path" value="{{ relative_path }}"><input type="search" name="q" value="{{ query }}" placeholder="{{ _('Filter folders in this directory…') }}" aria-label="{{ _('Filter') }}"><button class="button secondary" type="submit">{{ _('Filter') }}</button>{% if query %}<a class="button secondary" href="/analyses/new?source={{ source_id }}&path={{ relative_path|urlencode }}">{{ _('Clear filter') }}</a>{% endif %}</form>
+<div class="browser-summary"><span>{{ total_directories }} folder</span>{% if results_limited %}<strong>{{ _('Showing first results') }}</strong>{% endif %}</div>
+{% if relative_path %}<div class="analysis-actions"><form method="post" action="/analyses/container"><input type="hidden" name="source_id" value="{{ source_id }}"><input type="hidden" name="relative_path" value="{{ relative_path }}"><button class="button success" type="submit">{{ _('Analyze this release') }}</button></form><form method="post" action="/analyses/batch" onsubmit="return confirm({{ _('Batch confirm')|tojson }})"><input type="hidden" name="source_id" value="{{ source_id }}"><input type="hidden" name="relative_path" value="{{ relative_path }}"><button class="button secondary" type="submit">{{ _('Queue albums recursively') }}</button></form></div><p class="batch-help">{{ _('Batch help') }}</p>{% endif %}
+{% if parent_path is not none %}<a class="directory-row" href="/analyses/new?source={{ source_id }}&path={{ parent_encoded }}"><span>📁 ..</span></a>{% endif %}
+<div id="directory-results" data-source="{{ source_id }}" data-path="{{ relative_path }}">{% for directory in directories %}<a class="directory-row" href="/analyses/new?source={{ source_id }}&path={{ directory.encoded }}"><span>📁 {{ directory.name }}</span><span aria-hidden="true">→</span></a>{% else %}<div class="empty"><p>{{ _('No folders found') }}.</p></div>{% endfor %}</div>
+{% else %}<div class="empty"><p>{{ _('No analysis sources configured') }}.</p><a class="button success" href="/settings">{{ _('Configure a source') }}</a></div>{% endif %}
 </section>
+{% if sources %}<script>
+(() => {
+const input=document.querySelector('.browser-filter input[name="q"]'),results=document.getElementById('directory-results'),summary=document.querySelector('.browser-summary');
+if(!input||!results)return;
+const messages={none:{{ _('No folders found')|tojson }},limited:{{ _('Showing first results')|tojson }},error:{{ _('Unable to update folder list.')|tojson }}};
+let timer,controller;
+function render(payload){results.replaceChildren();if(!payload.directories.length){const empty=document.createElement('div');empty.className='empty';const p=document.createElement('p');p.textContent=messages.none+'.';empty.append(p);results.append(empty);}
+for(const directory of payload.directories){const link=document.createElement('a');link.className='directory-row';link.href='/analyses/new?'+new URLSearchParams({source:results.dataset.source,path:directory.relative});const label=document.createElement('span');label.textContent='📁 '+directory.name;const arrow=document.createElement('span');arrow.textContent='→';arrow.setAttribute('aria-hidden','true');link.append(label,arrow);results.append(link);}
+summary.replaceChildren();const count=document.createElement('span');count.textContent=String(payload.total);summary.append(count);if(payload.limited){const warning=document.createElement('strong');warning.textContent=messages.limited;summary.append(warning);}}
+async function filterDirectories(){if(controller)controller.abort();controller=new AbortController();const params=new URLSearchParams({path:results.dataset.path,q:input.value.trim()});try{const response=await fetch('/api/sources/'+results.dataset.source+'/directories?'+params,{signal:controller.signal});if(!response.ok)throw new Error();render(await response.json());}catch(error){if(error.name!=='AbortError')summary.textContent=messages.error;}}
+input.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(filterDirectories,180);});
+})();
+</script>{% endif %}
 {% endblock %}
