@@ -42,7 +42,7 @@
   <div class="settings-row"><span>{{ _('Move albums automatically after analysis') }}</span><strong>{{ _('Enabled') if settings.auto_route else _('Manual') }}</strong></div>
 </section>
 <section class="settings-grid">
-{% for name, item in [(_('Picard staging'), settings.staging), (_('Quarantine'), settings.quarantine), (_('Rejected'), settings.rejected)] %}
+{% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
 <article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>
 {% endfor %}
 </section>
