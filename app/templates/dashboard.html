@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ _('Dashboard') }} · Lossless Validator{% endblock %}
+{% block title %}{{ _('Dashboard') }} · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-heading dashboard-heading"><div><p class="eyebrow">{{ _('Music pipeline') }}</p><h1>{{ _('Dashboard') }}</h1><p class="heading-copy">{{ _('Quality overview and analysis activity across the indexed library.') }}</p></div><div class="heading-actions">{% if has_active_jobs %}<a class="pipeline-state active" href="/analyses"><span class="live-dot"></span>{{ _('Pipeline active') }}</a>{% else %}<a class="pipeline-state" href="/analyses">{{ _('Pipeline idle') }}</a>{% endif %}<a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></div></section>
 <section class="stats dashboard-stats">
