@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% macro help(text) %}<span class="help-tooltip" tabindex="0" aria-label="{{ text }}">?<span class="help-tooltip-content" role="tooltip">{{ text }}</span></span>{% endmacro %}
-{% block title %}{{ track.display_path }} · Lossless Validator{% endblock %}
+{% block title %}{{ track.display_path }} · {{ app_name }}{% endblock %}
 {% block content %}
 <a class="back" href="/releases/{{ track.release.id }}">← {{ track.release.title }}</a>
 <section class="release-header status-accent {{ track.status|verdict_tone }}">
