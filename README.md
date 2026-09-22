@@ -25,7 +25,7 @@ Requirements:
 - a media directory mounted on the Docker host
 - read/write access for the configured UID and GID
 
-Create the local configuration:
+Download `compose.yml` and `.env.example`, then prepare the deployment:
 
 ```sh
 cp .env.example .env
@@ -46,6 +46,27 @@ Open `http://HOST:8090`, or the port selected in `.env`.
 The production `compose.yml` is self-contained. Development overrides are not
 required on a production host.
 
+## Container image
+
+Stable images are published to:
+
+```text
+ghcr.io/spacechips31/sonic-sentry
+```
+
+Available release tags include the exact version (`0.1.0`), the minor release
+(`0.1`), and `latest`. Production deployments should prefer the exact
+version.
+
+If the GitHub Container Registry package is private, authenticate once before
+pulling:
+
+```sh
+docker login ghcr.io
+```
+
+Use your GitHub username and a personal access token with `read:packages`.
+
 ## Persistent data
 
 Back up these directories:
@@ -65,10 +86,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For the current stable release:
+For SonicSentry 0.1.0:
 
 ```env
-LOSSLESS_VALIDATOR_IMAGE=git.spacechips.it/chips/sonic-sentry
+LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
 LOSSLESS_VALIDATOR_VERSION=0.1.0
 ```
 
@@ -80,17 +101,11 @@ docker compose -f compose.yml -f compose.dev.yml build
 docker compose -f compose.yml -f compose.dev.yml up -d
 ```
 
-## Publishing an image
+## Releasing
 
-Authenticate to the Forgejo registry and publish a semantic version:
-
-```sh
-docker login git.spacechips.it
-./scripts/publish-image.sh 0.1.0
-```
-
-The script publishes `0.1.0`, `0.1`, and `latest`. Existing release tags
-must not be reused.
+Pushing a semantic version tag such as `v0.1.0` runs the GitHub Actions
+publication workflow. It builds the image once and publishes the corresponding
+`0.1.0`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
 
 ## Exit statuses
 
