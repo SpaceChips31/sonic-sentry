@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
 from app.i18n import resolve_language, translate
-from app.version import APP_VERSION
+from app.version import APP_NAME, APP_VERSION
 
 
 LABELS = {
@@ -105,6 +105,7 @@ def localized_interp(value: str, language: str) -> str:
 
 
 def configure_templates(templates: Jinja2Templates) -> Jinja2Templates:
+    templates.env.globals["app_name"] = APP_NAME
     templates.env.globals["app_version"] = APP_VERSION
 
     @pass_context
