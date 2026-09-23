@@ -9,12 +9,12 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, UPLOAD_ROOT
-from app.database import Base, SessionLocal, engine
-from app.models import AnalysisJob, AnalysisSource, Release, Track
+from app.database import Base, SessionLocal, engine, migrate_schema
+from app.models import AnalysisBatch, AnalysisJob, AnalysisSource, Release, Track
 from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
@@ -26,6 +26,7 @@ from app.auth import AuthenticationMiddleware, router as auth_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    migrate_schema()
     seed_analysis_sources()
     yield
 
@@ -234,6 +235,12 @@ def analyses(request: Request):
                 AnalysisJob.id.desc(),
             )
         ).all()
+        batches = session.scalars(
+            select(AnalysisBatch)
+            .options(selectinload(AnalysisBatch.jobs))
+            .order_by(AnalysisBatch.id.desc())
+            .limit(20)
+        ).all()
 
         job_groups = {
             status: [
@@ -245,6 +252,7 @@ def analyses(request: Request):
                 "QUEUED",
                 "FAILED",
                 "COMPLETED",
+                "CANCELLED",
             )
         }
 
@@ -259,6 +267,7 @@ def analyses(request: Request):
             context={
                 "job_groups": job_groups,
                 "has_active_jobs": has_active_jobs,
+                "batches": batches,
             },
         )
 
@@ -417,6 +426,7 @@ def create_container_analysis(
 def create_batch_analysis(
     source_id: int = Form(...),
     relative_path: str = Form(...),
+    selected: list[str] = Form(default=[]),
 ):
     configured_source, source = resolve_source_directory(source_id, relative_path)
 
@@ -431,8 +441,26 @@ def create_batch_analysis(
             detail="No FLAC releases were found below the selected directory",
         )
 
+    if selected:
+        allowed = {str(item) for item in releases}
+        releases = [
+            Path(item).resolve()
+            for item in selected
+            if str(Path(item).resolve()) in allowed
+        ]
+        if not releases:
+            raise HTTPException(status_code=400, detail="No valid releases were selected")
+
     created = 0
     with SessionLocal() as session:
+        batch = AnalysisBatch(
+            name=source.name,
+            source_path=str(source),
+            status="ACTIVE",
+            created_at=utc_now(),
+        )
+        session.add(batch)
+        session.flush()
         active_paths = set(
             session.scalars(
                 select(AnalysisJob.source_path).where(
@@ -452,6 +480,7 @@ def create_batch_analysis(
                     display_name=release_path.name,
                     status="QUEUED",
                     created_at=utc_now(),
+                    batch_id=batch.id,
                 )
             )
             created += 1
@@ -464,6 +493,49 @@ def create_batch_analysis(
             detail="All discovered releases are already queued or being analyzed",
         )
 
+    return RedirectResponse("/analyses", status_code=303)
+
+
+@app.post("/analyses/batch/preview", response_class=HTMLResponse)
+def preview_batch(
+    request: Request,
+    source_id: int = Form(...),
+    relative_path: str = Form(...),
+):
+    configured_source, source = resolve_source_directory(source_id, relative_path)
+    try:
+        releases = discover_releases(source)
+    except BatchDiscoveryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request=request,
+        name="batch_preview.html",
+        context={
+            "source": configured_source,
+            "relative_path": relative_path,
+            "root": source,
+            "releases": releases,
+        },
+    )
+
+
+@app.post("/analyses/batches/{batch_id}/{action}")
+def control_batch(batch_id: int, action: str):
+    statuses = {"pause": "PAUSED", "resume": "ACTIVE", "cancel": "CANCELLED"}
+    if action not in statuses:
+        raise HTTPException(status_code=400, detail="Invalid batch action")
+    with SessionLocal() as session:
+        batch = session.get(AnalysisBatch, batch_id)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        batch.status = statuses[action]
+        if action == "cancel":
+            session.execute(
+                update(AnalysisJob)
+                .where(AnalysisJob.batch_id == batch.id, AnalysisJob.status == "QUEUED")
+                .values(status="CANCELLED", error="Cancelled with batch")
+            )
+        session.commit()
     return RedirectResponse("/analyses", status_code=303)
 
 @app.post("/analyses/upload")

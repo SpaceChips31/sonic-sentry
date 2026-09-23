@@ -63,6 +63,21 @@ class AnalysisJob(Base):
     status: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
     created_at: Mapped[str] = mapped_column(String)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_batches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    batch: Mapped[AnalysisBatch | None] = relationship(back_populates="jobs")
+
+
+class AnalysisBatch(Base):
+    __tablename__ = "analysis_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    source_path: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="ACTIVE", index=True)
+    created_at: Mapped[str] = mapped_column(String)
+    jobs: Mapped[list[AnalysisJob]] = relationship(back_populates="batch")
 
 
 class ReleaseOperation(Base):

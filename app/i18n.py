@@ -210,6 +210,22 @@ ITALIAN = {
     "Change password": "Cambia password",
     "Current password": "Password attuale",
     "New password": "Nuova password",
+    "Prepare recursive batch": "Prepara batch ricorsivo",
+    "Batch preview": "Anteprima batch",
+    "Batch analysis": "Analisi batch",
+    "albums found": "album trovati",
+    "Select all": "Seleziona tutti",
+    "Queue selected albums": "Accoda album selezionati",
+    "No albums found": "Nessun album trovato",
+    "Batches": "Batch",
+    "albums": "album",
+    "Active": "Attivo",
+    "Paused": "In pausa",
+    "Cancelled": "Annullato",
+    "Pause": "Pausa",
+    "Resume": "Riprendi",
+    "Cancel": "Annulla",
+    "No cancelled analyses.": "Nessuna analisi annullata.",
 }
 
 

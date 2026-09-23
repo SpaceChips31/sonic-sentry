@@ -2,11 +2,11 @@ import subprocess
 import time
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from app.config import REPORT_ROOT
-from app.database import Base, SessionLocal, engine
-from app.models import AnalysisJob
+from app.database import Base, SessionLocal, engine, migrate_schema
+from app.models import AnalysisBatch, AnalysisJob
 from app.services.importer import import_report
 from app.services.file_workflow import auto_route_release
 
@@ -33,7 +33,9 @@ def claim_job():
     with SessionLocal() as session:
         job = session.scalar(
             select(AnalysisJob)
+            .outerjoin(AnalysisBatch, AnalysisJob.batch_id == AnalysisBatch.id)
             .where(AnalysisJob.status == "QUEUED")
+            .where(or_(AnalysisJob.batch_id.is_(None), AnalysisBatch.status == "ACTIVE"))
             .order_by(AnalysisJob.id)
             .limit(1)
         )
@@ -58,7 +60,21 @@ def finish_job(job_id: int, status: str, error: str | None = None):
         if job is not None:
             job.status = status
             job.error = error
+            batch_id = job.batch_id
             session.commit()
+            if batch_id is not None:
+                remaining = session.scalar(
+                    select(AnalysisJob.id)
+                    .where(
+                        AnalysisJob.batch_id == batch_id,
+                        AnalysisJob.status.in_({"QUEUED", "ANALYZING"}),
+                    )
+                    .limit(1)
+                )
+                batch = session.get(AnalysisBatch, batch_id)
+                if batch is not None and remaining is None and batch.status != "CANCELLED":
+                    batch.status = "COMPLETED"
+                    session.commit()
 
 
 def process_job(job):
@@ -114,6 +130,7 @@ def process_job(job):
 
 def main():
     Base.metadata.create_all(bind=engine)
+    migrate_schema()
     recovered = recover_interrupted_jobs()
     print(
         f"SonicSentry worker started; recovered {recovered} job(s)",
