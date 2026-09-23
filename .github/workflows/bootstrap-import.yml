@@ -18,12 +18,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Import the prepared dev history
+      - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Read the prepared history
+        run: |
           git fetch ./sonic-sentry-dev.bundle dev:refs/remotes/bundle/dev
+
+      - name: Merge the prepared history
+        run: |
           git merge --no-edit --no-ff refs/remotes/bundle/dev
+
+      - name: Remove temporary import files
+        run: |
           git rm sonic-sentry-dev.bundle .github/workflows/bootstrap-import.yml
           git commit -m "chore: remove temporary dev import files"
+
+      - name: Publish the imported history
+        run: |
           git push origin HEAD:dev
