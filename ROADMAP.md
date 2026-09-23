@@ -5,9 +5,9 @@ promises and may be reordered as the real music workflow evolves.
 
 ## Access and security
 
-- Optional authentication inspired by the *arr applications
-- Local user accounts with administrator and operator roles
-- Login form, session management, logout, and password changes
+- Optional authentication inspired by the *arr applications (implemented on `dev`)
+- Local user accounts with administrator and operator roles (implemented on `dev`)
+- Login form, session management, logout, and password changes (implemented on `dev`)
 - CSRF protection for forms that modify settings, reviews, jobs, or files
 - Optional trusted-proxy and single-sign-on support for homelab deployments
 - First-run setup that remains disabled when authentication is not requested
@@ -20,7 +20,7 @@ trusted private network without adding unnecessary setup.
 - Resumable and scheduled library scans
 - Better duplicate-release detection
 - Configurable quality policies and per-source defaults
-- Richer batch progress, cancellation, and retry controls
+- Batch selection, pause, resume, cancellation, and concurrency controls (implemented on `dev`)
 - Comparison between different editions of the same album
 
 ## Sources and integrations
@@ -32,10 +32,10 @@ trusted private network without adding unnecessary setup.
 
 ## Review and reporting
 
-- Searchable audit history
+- Review audit history, notes, latest-decision undo, and reversible moves (implemented on `dev`)
 - Exportable summaries for releases and batches
-- Side-by-side forensic explanations for uncertain tracks
-- Optional comments and review notes at album level
+- Album-relative forensic comparison and spectrograms (implemented on `dev`)
+- Optional comments and review notes at album level (implemented on `dev`)
 
 ## Operations
 

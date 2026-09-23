@@ -17,6 +17,7 @@ from app.services.file_workflow import (
 )
 from app.services.sources import SourceConfigurationError, add_source
 from app.services.runtime_settings import SettingError, set_value
+from app.auth import require_admin
 
 
 router = APIRouter()
@@ -65,10 +66,12 @@ def set_language(language: str = Form(...)):
 
 @router.post("/settings/sources")
 def create_source(
+    request: Request,
     name: str = Form(...),
     path: str = Form(...),
     kind: str = Form(...),
 ):
+    require_admin(request)
     try:
         add_source(name, path, kind)
     except SourceConfigurationError as exc:
@@ -77,29 +80,36 @@ def create_source(
 
 
 @router.post("/settings/sources/{source_id}/toggle")
-def toggle_source(source_id: int):
+def toggle_source(request: Request, source_id: int):
+    require_admin(request)
     with SessionLocal() as session:
         source = session.get(AnalysisSource, source_id)
         if source is None:
             raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        if source.locked:
+            raise HTTPException(status_code=409, detail="Source is fixed by LOSSLESS_SOURCE_ROOTS")
         source.enabled = not source.enabled
         session.commit()
     return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/sources/{source_id}/delete")
-def delete_source(source_id: int):
+def delete_source(request: Request, source_id: int):
+    require_admin(request)
     with SessionLocal() as session:
         source = session.get(AnalysisSource, source_id)
         if source is None:
             raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        if source.locked:
+            raise HTTPException(status_code=409, detail="Source is fixed by LOSSLESS_SOURCE_ROOTS")
         session.delete(source)
         session.commit()
     return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/runtime/{key}")
-def update_runtime_setting(key: str, value: str = Form("")):
+def update_runtime_setting(request: Request, key: str, value: str = Form("")):
+    require_admin(request)
     try:
         set_value(key, value)
     except SettingError as exc:
@@ -109,9 +119,11 @@ def update_runtime_setting(key: str, value: str = Form("")):
 
 @router.post("/releases/{release_id}/files")
 def release_file_action(
+    request: Request,
     release_id: int,
     action: str = Form(...),
 ):
+    require_admin(request)
     try:
         if action == "manual-pass":
             move_release(release_id, "STAGING", manual_pass=True)
@@ -131,7 +143,8 @@ def release_file_action(
 
 
 @router.post("/releases/{release_id}/files/undo/{operation_id}")
-def undo_release_file_action(release_id: int, operation_id: int):
+def undo_release_file_action(request: Request, release_id: int, operation_id: int):
+    require_admin(request)
     try:
         undo_move(release_id, operation_id)
     except FileOperationError as exc:

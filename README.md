@@ -16,6 +16,10 @@ rejected area.
 - routes complete album directories without overwriting existing destinations
 - recovers interrupted queue jobs after a worker restart
 - stores its database, reports, uploads, and settings in persistent volumes
+- optionally protects the interface with local administrator and operator accounts
+- provides selectable, pausable, resumable, and cancellable analysis batches
+- supports quick multi-track review, album decisions, notes, and audit history
+- compares uncertain tracks with their album and generates spectrograms on demand
 
 ## Production deployment
 
@@ -99,6 +103,22 @@ cp .env.example .env
 docker compose -f compose.yml -f compose.dev.yml build
 docker compose -f compose.yml -f compose.dev.yml up -d
 ```
+
+Builds from the `dev` branch are published as
+`ghcr.io/spacechips31/sonic-sentry:dev`. They are intended for isolated test
+deployments and should not replace the stable container without a backup.
+
+## Configuration ownership
+
+Workflow settings can be managed from the web interface. If a corresponding
+environment variable is explicitly supplied by Docker Compose or the runtime,
+SonicSentry displays a lock and treats that value as read-only. Variables that
+are absent from the container environment use application defaults and remain
+editable in the database.
+
+Authentication is disabled by default. Enable it in Settings, or lock it at
+deployment time with `SONIC_SENTRY_AUTH_ENABLED=true`. SonicSentry then guides
+you through creating the first administrator.
 
 ## Releasing
 

@@ -8,17 +8,20 @@ x-app: &app
   security_opt:
     - no-new-privileges:true
   environment: &app-environment
-    LOSSLESS_VALIDATOR_VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
-    LOSSLESS_VALIDATOR_DATA_DIR: /app/data
-    LOSSLESS_REPORT_ROOT: /app/reports
-    LOSSLESS_UPLOAD_ROOT: /app/uploads
-    LOSSLESS_SOURCE_ROOTS: "${LOSSLESS_SOURCE_ROOTS:-/data/downloads/soulseek:/data/music/legacy}"
-    LOSSLESS_FILE_OPERATIONS: "${LOSSLESS_FILE_OPERATIONS:-false}"
-    LOSSLESS_AUTO_ROUTE: "${LOSSLESS_AUTO_ROUTE:-false}"
-    LOSSLESS_MOVABLE_ROOTS: "${LOSSLESS_MOVABLE_ROOTS:-/data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected}"
-    LOSSLESS_STAGING_ROOT: "${LOSSLESS_STAGING_ROOT:-/data/music/validator/staging}"
-    LOSSLESS_QUARANTINE_ROOT: "${LOSSLESS_QUARANTINE_ROOT:-/data/music/validator/quarantine}"
-    LOSSLESS_REJECTED_ROOT: "${LOSSLESS_REJECTED_ROOT:-/data/music/validator/rejected}"
+    - "LOSSLESS_VALIDATOR_VERSION=${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
+    - LOSSLESS_VALIDATOR_DATA_DIR=/app/data
+    - LOSSLESS_REPORT_ROOT=/app/reports
+    - LOSSLESS_UPLOAD_ROOT=/app/uploads
+    - LOSSLESS_SOURCE_ROOTS
+    - LOSSLESS_FILE_OPERATIONS
+    - LOSSLESS_AUTO_ROUTE
+    - LOSSLESS_MOVABLE_ROOTS
+    - LOSSLESS_STAGING_ROOT
+    - LOSSLESS_QUARANTINE_ROOT
+    - LOSSLESS_REJECTED_ROOT
+    - SONIC_SENTRY_WORKER_CONCURRENCY
+    - SONIC_SENTRY_AUTH_ENABLED
+    - SONIC_SENTRY_SECRET_KEY
   volumes: &app-volumes
     - ./data:/app/data
     - ./reports:/app/reports

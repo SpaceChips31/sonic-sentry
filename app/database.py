@@ -36,3 +36,9 @@ def migrate_schema() -> None:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE analysis_jobs ADD COLUMN batch_id INTEGER"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_analysis_jobs_batch_id ON analysis_jobs (batch_id)"))
+    source_columns = {
+        column["name"] for column in inspector.get_columns("analysis_sources")
+    } if "analysis_sources" in inspector.get_table_names() else set()
+    if source_columns and "locked" not in source_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE analysis_sources ADD COLUMN locked BOOLEAN NOT NULL DEFAULT 0"))

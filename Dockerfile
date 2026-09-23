@@ -59,8 +59,7 @@ ENV PYTHONUNBUFFERED=1 \
     LOSSLESS_VALIDATOR_VERSION="${VERSION}" \
     LOSSLESS_VALIDATOR_DATA_DIR=/app/data \
     LOSSLESS_REPORT_ROOT=/app/reports \
-    LOSSLESS_UPLOAD_ROOT=/app/uploads \
-    LOSSLESS_SOURCE_ROOTS=/data/downloads/soulseek:/data/music/legacy
+    LOSSLESS_UPLOAD_ROOT=/app/uploads
 
 USER validator
 

@@ -104,6 +104,7 @@ class AnalysisSource(Base):
     path: Mapped[str] = mapped_column(String, unique=True, index=True)
     kind: Mapped[str] = mapped_column(String, default="FILESYSTEM")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class ApplicationSetting(Base):

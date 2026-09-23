@@ -137,7 +137,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def require_admin(request: Request) -> User:
+def require_admin(request: Request) -> User | None:
+    if not bool_value("auth_enabled"):
+        return None
     user = getattr(request.state, "user", None)
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Administrator access required")
@@ -218,7 +220,7 @@ def add_user(request: Request, username: str = Form(...), password: str = Form(.
 @router.post("/settings/users/{user_id}/toggle")
 def toggle_user(request: Request, user_id: int):
     administrator = require_admin(request)
-    if administrator.id == user_id:
+    if administrator is not None and administrator.id == user_id:
         raise HTTPException(status_code=409, detail="You cannot disable your own account")
     with SessionLocal() as session:
         user = session.get(User, user_id)

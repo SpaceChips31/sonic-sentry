@@ -21,10 +21,10 @@ SPECS = {
     for spec in (
         SettingSpec("file_operations", "LOSSLESS_FILE_OPERATIONS", "bool", "false"),
         SettingSpec("auto_route", "LOSSLESS_AUTO_ROUTE", "bool", "false"),
-        SettingSpec("movable_roots", "LOSSLESS_MOVABLE_ROOTS", "paths", ""),
-        SettingSpec("staging_root", "LOSSLESS_STAGING_ROOT", "path", ""),
-        SettingSpec("quarantine_root", "LOSSLESS_QUARANTINE_ROOT", "path", ""),
-        SettingSpec("rejected_root", "LOSSLESS_REJECTED_ROOT", "path", ""),
+        SettingSpec("movable_roots", "LOSSLESS_MOVABLE_ROOTS", "paths", "/data/downloads/soulseek:/data/music/legacy:/data/music/validator/quarantine:/data/music/validator/rejected"),
+        SettingSpec("staging_root", "LOSSLESS_STAGING_ROOT", "path", "/data/music/validator/staging"),
+        SettingSpec("quarantine_root", "LOSSLESS_QUARANTINE_ROOT", "path", "/data/music/validator/quarantine"),
+        SettingSpec("rejected_root", "LOSSLESS_REJECTED_ROOT", "path", "/data/music/validator/rejected"),
         SettingSpec("auth_enabled", "SONIC_SENTRY_AUTH_ENABLED", "bool", "false"),
         SettingSpec("worker_concurrency", "SONIC_SENTRY_WORKER_CONCURRENCY", "int", "1"),
     )

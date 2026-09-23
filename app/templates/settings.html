@@ -20,10 +20,10 @@
   <div class="source-list">
   {% for source in sources %}
     <div class="source-item {{ 'disabled' if not source.enabled }}">
-      <span><strong>{{ source.name }}</strong><small>{{ source.kind }}</small><code>{{ source.path }}</code></span>
+      <span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span>
       <span class="source-actions">
-        <form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
-        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>
+        {% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}
       </span>
     </div>
   {% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}
