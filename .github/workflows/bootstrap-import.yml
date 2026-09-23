@@ -1,0 +1,29 @@
+name: Import SonicSentry dev commits
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/bootstrap-import.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import the prepared dev history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch ./sonic-sentry-dev.bundle dev:refs/remotes/bundle/dev
+          git merge --no-edit --no-ff refs/remotes/bundle/dev
+          git rm sonic-sentry-dev.bundle .github/workflows/bootstrap-import.yml
+          git commit -m "chore: remove temporary dev import files"
+          git push origin HEAD:dev
