@@ -1,4 +1,6 @@
 import json
+import subprocess
+from statistics import median
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -6,7 +8,7 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import case, delete, func, select, update
@@ -14,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine, migrate_schema
-from app.models import AnalysisBatch, AnalysisJob, AnalysisSource, Release, Track
+from app.models import AnalysisBatch, AnalysisJob, AnalysisSource, Release, ReviewDecision, Track
 from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
@@ -73,6 +75,55 @@ def recalculate_release_status(release: Release) -> None:
         release.status = "QUARANTINE"
     else:
         release.status = "PASS"
+
+
+def actor_name(request: Request) -> str:
+    user = getattr(request.state, "user", None)
+    return user.username if user else "local"
+
+
+def record_review(
+    session,
+    track: Track,
+    decision: str,
+    *,
+    actor: str,
+    note: str = "",
+) -> None:
+    previous = track.human_review
+    track.human_review = decision
+    session.add(
+        ReviewDecision(
+            track_id=track.id,
+            release_id=track.release_id,
+            decision=decision,
+            previous_review=previous,
+            actor=actor,
+            note=note.strip(),
+            created_at=utc_now(),
+        )
+    )
+
+
+def spectral_comparison(track: Track, peers: list[Track]) -> dict:
+    def spectral(item: Track) -> dict:
+        payload = json.loads(item.forensic_json or "{}")
+        return payload.get("result", {}).get("authenticity", {}).get("spectral", {})
+
+    current = spectral(track)
+    samples = [spectral(peer) for peer in peers]
+    cutoffs = [float(item["cutoff_hz"]) for item in samples if item.get("cutoff_hz")]
+    confidences = [float(item["net_confidence_pct"]) for item in samples if item.get("net_confidence_pct") is not None]
+    cutoff_median = median(cutoffs) if cutoffs else None
+    confidence_median = median(confidences) if confidences else None
+    current_cutoff = current.get("cutoff_hz")
+    return {
+        "cutoff_median": cutoff_median,
+        "confidence_median": confidence_median,
+        "cutoff_delta": (float(current_cutoff) - cutoff_median) if current_cutoff and cutoff_median else None,
+        "peer_count": len(peers),
+        "album_pattern": sum(peer.status == track.status for peer in peers) >= max(2, len(peers) // 2),
+    }
 
 
 def resolve_source_directory(source_id: int, relative_path: str) -> tuple[AnalysisSource, Path]:
@@ -675,6 +726,20 @@ def track_detail(request: Request, track_id: int):
         forensics = json.loads(track.forensic_json or "{}")
         result = forensics.get("result", {})
         spectral = result.get("authenticity", {}).get("spectral", {})
+        peers = list(
+            session.scalars(
+                select(Track)
+                .where(Track.release_id == track.release_id)
+                .order_by(Track.path)
+            ).all()
+        )
+        decisions = list(
+            session.scalars(
+                select(ReviewDecision)
+                .where(ReviewDecision.track_id == track.id)
+                .order_by(ReviewDecision.id.desc())
+            ).all()
+        )
 
         return templates.TemplateResponse(
             request=request,
@@ -682,12 +747,14 @@ def track_detail(request: Request, track_id: int):
             context={
                 "track": track,
                 "spectral": spectral,
+                "comparison": spectral_comparison(track, peers),
+                "decisions": decisions,
             },
         )
 
 
 @app.post("/tracks/{track_id}/review/{decision}")
-def review_track(track_id: int, decision: str):
+def review_track(request: Request, track_id: int, decision: str, note: str = Form("")):
     decisions = {
         "approve": "APPROVED",
         "reject": "REJECTED",
@@ -716,7 +783,13 @@ def review_track(track_id: int, decision: str):
                 detail="Only quarantined tracks can be reviewed",
             )
 
-        track.human_review = decisions[decision]
+        record_review(
+            session,
+            track,
+            decisions[decision],
+            actor=actor_name(request),
+            note=note,
+        )
         recalculate_release_status(track.release)
         session.commit()
 
@@ -724,6 +797,132 @@ def review_track(track_id: int, decision: str):
             f"/tracks/{track.id}",
             status_code=303,
         )
+
+
+@app.get("/reviews", response_class=HTMLResponse)
+def review_queue(request: Request):
+    with SessionLocal() as session:
+        tracks = list(
+            session.scalars(
+                select(Track)
+                .where(Track.status == "QUARANTINE", Track.human_review == "NONE")
+                .options(selectinload(Track.release))
+                .order_by(Track.release_id, Track.path)
+            ).all()
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="reviews.html",
+        context={"tracks": tracks},
+    )
+
+
+@app.post("/reviews/bulk")
+def bulk_review(
+    request: Request,
+    track_ids: list[int] = Form(default=[]),
+    decision: str = Form(...),
+    note: str = Form(""),
+):
+    mapped = {"approve": "APPROVED", "reject": "REJECTED"}
+    if decision not in mapped or not track_ids:
+        raise HTTPException(status_code=400, detail="Select tracks and a valid decision")
+    with SessionLocal() as session:
+        tracks = list(
+            session.scalars(
+                select(Track)
+                .where(Track.id.in_(track_ids), Track.status == "QUARANTINE")
+                .options(selectinload(Track.release).selectinload(Release.tracks))
+            ).all()
+        )
+        releases = {}
+        for track in tracks:
+            record_review(session, track, mapped[decision], actor=actor_name(request), note=note)
+            releases[track.release.id] = track.release
+        for release in releases.values():
+            recalculate_release_status(release)
+        session.commit()
+    return RedirectResponse("/reviews", status_code=303)
+
+
+@app.post("/releases/{release_id}/review/{decision}")
+def review_release(request: Request, release_id: int, decision: str, note: str = Form("")):
+    mapped = {"approve": "APPROVED", "reject": "REJECTED", "reset": "NONE"}
+    if decision not in mapped:
+        raise HTTPException(status_code=400, detail="Invalid decision")
+    with SessionLocal() as session:
+        release = session.scalar(
+            select(Release).where(Release.id == release_id).options(selectinload(Release.tracks))
+        )
+        if release is None:
+            raise HTTPException(status_code=404, detail="Release not found")
+        for track in release.tracks:
+            if track.status == "QUARANTINE":
+                record_review(session, track, mapped[decision], actor=actor_name(request), note=note)
+        recalculate_release_status(release)
+        session.commit()
+    return RedirectResponse(f"/releases/{release_id}", status_code=303)
+
+
+@app.post("/reviews/{review_id}/undo")
+def undo_review(review_id: int):
+    with SessionLocal() as session:
+        review = session.get(ReviewDecision, review_id)
+        if review is None or review.undone:
+            raise HTTPException(status_code=404, detail="Review decision not found")
+        newer = session.scalar(
+            select(ReviewDecision.id)
+            .where(
+                ReviewDecision.track_id == review.track_id,
+                ReviewDecision.id > review.id,
+                ReviewDecision.undone.is_(False),
+            )
+            .limit(1)
+        )
+        if newer is not None:
+            raise HTTPException(status_code=409, detail="Only the latest decision can be undone")
+        track = session.scalar(
+            select(Track)
+            .where(Track.id == review.track_id)
+            .options(selectinload(Track.release).selectinload(Release.tracks))
+        )
+        if track is None:
+            raise HTTPException(status_code=404, detail="Track not found")
+        track.human_review = review.previous_review
+        review.undone = True
+        recalculate_release_status(track.release)
+        session.commit()
+        track_id = track.id
+    return RedirectResponse(f"/tracks/{track_id}", status_code=303)
+
+
+def spectrogram_command(source: Path, destination: Path) -> list[str]:
+    return [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
+        "-lavfi", "showspectrumpic=s=1400x500:legend=1:color=intensity:scale=log",
+        str(destination),
+    ]
+
+
+@app.get("/tracks/{track_id}/spectrogram.png")
+def track_spectrogram(track_id: int):
+    with SessionLocal() as session:
+        track = session.get(Track, track_id)
+        if track is None:
+            raise HTTPException(status_code=404, detail="Track not found")
+        source = Path(track.path)
+    if not source.is_file():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    cache = REPORT_ROOT / "spectrograms"
+    cache.mkdir(parents=True, exist_ok=True)
+    destination = cache / f"track-{track_id}.png"
+    if not destination.exists() or destination.stat().st_mtime < source.stat().st_mtime:
+        try:
+            subprocess.run(spectrogram_command(source, destination), check=True, timeout=120)
+        except (subprocess.SubprocessError, OSError) as exc:
+            destination.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"Unable to create spectrogram: {exc}") from exc
+    return FileResponse(destination, media_type="image/png")
 
 
 @app.get("/health")

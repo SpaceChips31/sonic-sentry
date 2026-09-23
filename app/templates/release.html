@@ -3,6 +3,7 @@
 {% block content %}
 <a class="back" href="/">← {{ _('Releases') }}</a>
 <section class="release-header status-accent {{ release.status|verdict_tone }}"><div><p class="eyebrow">{{ _('Release') }}</p><h1>{{ release.title }}</h1><p class="source-path">{{ release.source_path }}</p></div><span class="badge large {{ release.status|lower }}">{{ release.status|human_status }}</span></section>
+{% if release.quarantine_tracks %}<section class="panel release-review"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ _('Whole album decision') }}</h2><p>{{ _('Whole album decision help') }}</p></div><form method="post"><label>{{ _('Optional note') }}<input name="note" maxlength="500"></label><div class="review-actions"><button class="button danger" formaction="/releases/{{ release.id }}/review/reject" type="submit">{{ _('Reject album') }}</button><button class="button success" formaction="/releases/{{ release.id }}/review/approve" type="submit">{{ _('Approve album') }}</button></div></form></section>{% endif %}
 <section class="stats">
 <article class="stat"><span>{{ _('Total tracks') }}</span><strong>{{ release.total_tracks }}</strong></article>
 <article class="stat pass"><span>{{ _('Automatic pass') }}</span><strong>{{ release.pass_tracks }}</strong></article>
