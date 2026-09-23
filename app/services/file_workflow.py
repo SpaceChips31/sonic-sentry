@@ -160,6 +160,44 @@ def delete_release_files(release_id: int) -> None:
         session.commit()
 
 
+def undo_move(release_id: int, operation_id: int) -> Path:
+    with SessionLocal() as session:
+        release = session.scalar(
+            select(Release)
+            .where(Release.id == release_id)
+            .options(selectinload(Release.tracks), selectinload(Release.operations))
+        )
+        if release is None:
+            raise FileOperationError("release not found")
+        operation = next((item for item in release.operations if item.id == operation_id), None)
+        if operation is None or not operation.action.startswith(("MOVE_TO_", "MANUAL_PASS_TO_")):
+            raise FileOperationError("operation cannot be undone")
+        if release.operations and release.operations[0].id != operation.id:
+            raise FileOperationError("only the latest file operation can be undone")
+        current = validate_source(Path(release.source_path))
+        if operation.destination_path is None or current != Path(operation.destination_path).resolve():
+            raise FileOperationError("release is no longer at the recorded destination")
+        original = Path(operation.source_path).resolve()
+        if not is_within(original, paths_value("movable_roots")):
+            raise FileOperationError("original location is outside the authorized folders")
+        if original.exists():
+            raise FileOperationError("original location is no longer available")
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(current), str(original))
+        update_paths(release, current, original)
+        session.add(
+            ReleaseOperation(
+                release_id=release.id,
+                action=f"UNDO_{operation.action}",
+                source_path=str(current),
+                destination_path=str(original),
+                created_at=utc_now(),
+            )
+        )
+        session.commit()
+        return original
+
+
 def auto_route_release(release_id: int) -> Path | None:
     if not bool_value("file_operations") or not bool_value("auto_route"):
         return None

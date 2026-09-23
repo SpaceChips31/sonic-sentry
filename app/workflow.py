@@ -13,6 +13,7 @@ from app.services.file_workflow import (
     delete_release_files,
     move_release,
     settings_snapshot,
+    undo_move,
 )
 from app.services.sources import SourceConfigurationError, add_source
 from app.services.runtime_settings import SettingError, set_value
@@ -127,3 +128,12 @@ def release_file_action(
         f"/releases/{release_id}",
         status_code=303,
     )
+
+
+@router.post("/releases/{release_id}/files/undo/{operation_id}")
+def undo_release_file_action(release_id: int, operation_id: int):
+    try:
+        undo_move(release_id, operation_id)
+    except FileOperationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(f"/releases/{release_id}", status_code=303)

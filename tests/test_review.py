@@ -3,6 +3,9 @@ from pathlib import Path
 
 from app.main import spectral_comparison, spectrogram_command
 from app.models import Release, Track
+from app.database import Base, SessionLocal, engine
+from app.models import ReleaseOperation
+from app.services.file_workflow import move_release, undo_move
 
 
 def forensic(cutoff: float, confidence: float) -> str:
@@ -42,3 +45,38 @@ def test_spectrogram_command_is_non_interactive(tmp_path):
     assert "-y" in command
     assert "showspectrumpic" in " ".join(command)
     assert command[-1].endswith("track.png")
+
+
+def test_album_move_can_be_undone_when_original_location_is_free(tmp_path, monkeypatch):
+    source_root = tmp_path / "source"
+    quarantine = tmp_path / "quarantine"
+    album = source_root / "Album"
+    album.mkdir(parents=True)
+    audio = album / "track.flac"
+    audio.write_bytes(b"fLaC")
+    quarantine.mkdir()
+    monkeypatch.setenv("LOSSLESS_FILE_OPERATIONS", "true")
+    monkeypatch.setenv("LOSSLESS_MOVABLE_ROOTS", f"{source_root}:{quarantine}")
+    monkeypatch.setenv("LOSSLESS_QUARANTINE_ROOT", str(quarantine))
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        release = Release(source_path=str(album), title="Album", status="QUARANTINE", total_tracks=1, pass_tracks=0, quarantine_tracks=1, rejected_tracks=0)
+        release.tracks.append(Track(path=str(audio), display_path="track.flac", status="QUARANTINE", integrity_ok=1, human_review="NONE"))
+        session.add(release)
+        session.commit()
+        release_id = release.id
+
+    moved = move_release(release_id, "QUARANTINE")
+    with SessionLocal() as session:
+        operation = session.query(ReleaseOperation).filter_by(release_id=release_id).order_by(ReleaseOperation.id.desc()).first()
+        operation_id = operation.id
+    restored = undo_move(release_id, operation_id)
+    assert moved.exists() is False
+    assert restored == album
+    assert audio.exists()
+
+    with SessionLocal() as session:
+        session.query(ReleaseOperation).filter_by(release_id=release_id).delete()
+        session.query(Track).filter_by(release_id=release_id).delete()
+        session.query(Release).filter_by(id=release_id).delete()
+        session.commit()
