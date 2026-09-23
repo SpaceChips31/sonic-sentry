@@ -20,6 +20,7 @@ from app.services.importer import import_report
 from app.presentation import configure_templates
 from app.services.sources import seed_analysis_sources
 from app.version import APP_NAME, APP_VERSION
+from app.auth import AuthenticationMiddleware, router as auth_router
 
 
 @asynccontextmanager
@@ -34,6 +35,7 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
+app.add_middleware(AuthenticationMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = configure_templates(Jinja2Templates(directory="app/templates"))
@@ -660,3 +662,4 @@ def health():
 from app.workflow import router as workflow_router
 
 app.include_router(workflow_router)
+app.include_router(auth_router)

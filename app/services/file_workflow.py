@@ -202,7 +202,7 @@ def settings_snapshot() -> dict:
         "rejected": describe_path(path_value("rejected_root")),
         "fields": {key: describe_setting(key) for key in (
             "file_operations", "auto_route", "movable_roots",
-            "staging_root", "quarantine_root", "rejected_root",
+            "staging_root", "quarantine_root", "rejected_root", "auth_enabled",
         )},
     }
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.i18n import resolve_language
-from app.models import AnalysisSource, Release
+from app.models import AnalysisSource, Release, User
 from app.presentation import configure_templates
 from app.services.file_workflow import (
     FileOperationError,
@@ -30,6 +30,7 @@ def settings_page(request: Request):
                 select(AnalysisSource).order_by(AnalysisSource.name, AnalysisSource.id)
             ).all()
         )
+        users = list(session.scalars(select(User).order_by(User.username)).all())
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
@@ -38,6 +39,7 @@ def settings_page(request: Request):
             "sources": sources,
             "language_preference": request.cookies.get("lv_language", "auto"),
             "effective_language": resolve_language(request),
+            "users": users,
         },
     )
 

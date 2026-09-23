@@ -193,6 +193,23 @@ ITALIAN = {
     "Environment": "Ambiente",
     "Database": "Database",
     "Default": "Predefinito",
+    "Require login": "Richiedi accesso",
+    "Security": "Sicurezza",
+    "Local users": "Utenti locali",
+    "Administrator": "Amministratore",
+    "User": "Utente",
+    "Username": "Nome utente",
+    "Password": "Password",
+    "Add user": "Aggiungi utente",
+    "Login": "Accedi",
+    "Logout": "Esci",
+    "Initial setup": "Configurazione iniziale",
+    "Create administrator": "Crea l'amministratore",
+    "Create administrator help": "Crea il primo account locale. Sarà autorizzato a gestire utenti, impostazioni e file.",
+    "Complete setup": "Completa configurazione",
+    "Change password": "Cambia password",
+    "Current password": "Password attuale",
+    "New password": "Nuova password",
 }
 
 
