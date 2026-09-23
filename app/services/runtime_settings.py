@@ -26,6 +26,7 @@ SPECS = {
         SettingSpec("quarantine_root", "LOSSLESS_QUARANTINE_ROOT", "path", ""),
         SettingSpec("rejected_root", "LOSSLESS_REJECTED_ROOT", "path", ""),
         SettingSpec("auth_enabled", "SONIC_SENTRY_AUTH_ENABLED", "bool", "false"),
+        SettingSpec("worker_concurrency", "SONIC_SENTRY_WORKER_CONCURRENCY", "int", "1"),
     )
 }
 
@@ -60,6 +61,10 @@ def path_value(key: str) -> Path | None:
     return Path(value).resolve() if value else None
 
 
+def int_value(key: str) -> int:
+    return int(raw_value(key))
+
+
 def paths_value(key: str) -> tuple[Path, ...]:
     return tuple(
         Path(item).resolve()
@@ -76,6 +81,14 @@ def normalize_value(spec: SettingSpec, value: str) -> str:
         return "true" if clean.lower() in {"1", "true", "yes", "on"} else "false"
     if spec.kind == "path":
         return str(Path(clean).resolve()) if clean else ""
+    if spec.kind == "int":
+        try:
+            number = int(clean)
+        except ValueError as exc:
+            raise SettingError("Invalid integer value") from exc
+        if number < 1 or number > 8:
+            raise SettingError("Value must be between 1 and 8")
+        return str(number)
     if spec.kind == "paths":
         return os.pathsep.join(
             str(Path(item).resolve())

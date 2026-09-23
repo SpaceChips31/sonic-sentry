@@ -255,6 +255,7 @@ ITALIAN = {
     "In practical terms": "In pratica",
     "Undo move": "Annulla spostamento",
     "Undo move confirm": "Riportare l'album nella posizione precedente? L'operazione è possibile solo se quella posizione è ancora libera.",
+    "Simultaneous analyses": "Analisi contemporanee",
 }
 
 

@@ -14,6 +14,7 @@ def clean_settings(monkeypatch):
         "LOSSLESS_FILE_OPERATIONS", "LOSSLESS_AUTO_ROUTE",
         "LOSSLESS_MOVABLE_ROOTS", "LOSSLESS_STAGING_ROOT",
         "LOSSLESS_QUARANTINE_ROOT", "LOSSLESS_REJECTED_ROOT",
+        "SONIC_SENTRY_WORKER_CONCURRENCY",
     ):
         monkeypatch.delenv(spec_env, raising=False)
     with SessionLocal() as session:
@@ -37,3 +38,10 @@ def test_environment_setting_is_locked(monkeypatch):
     assert field["value"] == "/data/fixed"
     with pytest.raises(SettingError):
         set_value("staging_root", "/tmp/other")
+
+
+def test_worker_concurrency_is_bounded():
+    set_value("worker_concurrency", "4")
+    assert describe("worker_concurrency")["value"] == "4"
+    with pytest.raises(SettingError):
+        set_value("worker_concurrency", "9")

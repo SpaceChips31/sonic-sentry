@@ -241,6 +241,7 @@ def settings_snapshot() -> dict:
         "fields": {key: describe_setting(key) for key in (
             "file_operations", "auto_route", "movable_roots",
             "staging_root", "quarantine_root", "rejected_root", "auth_enabled",
+            "worker_concurrency",
         )},
     }
 

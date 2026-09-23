@@ -1,5 +1,6 @@
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlalchemy import or_, select, update
@@ -9,6 +10,7 @@ from app.database import Base, SessionLocal, engine, migrate_schema
 from app.models import AnalysisBatch, AnalysisJob
 from app.services.importer import import_report
 from app.services.file_workflow import auto_route_release
+from app.services.runtime_settings import int_value
 
 VALIDATOR = Path("/app/validator/validate_release.py")
 EXPECTED_EXIT_CODES = {0, 10, 20}
@@ -137,14 +139,23 @@ def main():
         flush=True,
     )
 
-    while True:
-        job = claim_job()
+    concurrency = int_value("worker_concurrency")
+    print(f"Worker concurrency: {concurrency}", flush=True)
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = set()
+        while True:
+            finished = {future for future in futures if future.done()}
+            for future in finished:
+                future.result()
+            futures -= finished
 
-        if job is None:
-            time.sleep(2)
-            continue
+            while len(futures) < concurrency:
+                job = claim_job()
+                if job is None:
+                    break
+                futures.add(executor.submit(process_job, job))
 
-        process_job(job)
+            time.sleep(0.5 if futures else 2)
 
 
 if __name__ == "__main__":
