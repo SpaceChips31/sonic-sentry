@@ -15,6 +15,7 @@ from app.services.file_workflow import (
     settings_snapshot,
 )
 from app.services.sources import SourceConfigurationError, add_source
+from app.services.runtime_settings import SettingError, set_value
 
 
 router = APIRouter()
@@ -91,6 +92,15 @@ def delete_source(source_id: int):
             raise HTTPException(status_code=404, detail="Sorgente non trovata")
         session.delete(source)
         session.commit()
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/runtime/{key}")
+def update_runtime_setting(key: str, value: str = Form("")):
+    try:
+        set_value(key, value)
+    except SettingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse("/settings", status_code=303)
 
 

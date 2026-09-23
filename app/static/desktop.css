@@ -632,3 +632,6 @@ input[type="file"] {
 @media (max-width: 700px) {
     .settings-advanced > summary { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
+.runtime-setting{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(320px,1.2fr);gap:18px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)}
+.runtime-setting:last-child{border-bottom:0}.runtime-setting-label{display:flex;flex-direction:column;gap:4px}.runtime-setting-label small{color:var(--muted);font-family:monospace}.runtime-setting form{display:flex;gap:8px}.runtime-setting input,.runtime-setting select{flex:1}.locked-value{display:flex;gap:8px;align-items:center;min-width:0}.locked-value code{overflow-wrap:anywhere}.runtime-setting.locked{opacity:.88}
+@media(max-width:760px){.runtime-setting{grid-template-columns:1fr}.runtime-setting form{flex-wrap:wrap}}

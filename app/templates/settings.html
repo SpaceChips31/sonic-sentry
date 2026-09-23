@@ -36,10 +36,26 @@
   </form>
 </section>
 
+{% macro runtime_field(key, label, placeholder='') %}
+{% set field = settings.fields[key] %}
+<div class="runtime-setting {{ 'locked' if field.locked }}">
+  <div class="runtime-setting-label"><strong>{{ label }}</strong><small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>
+  {% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>
+  {% else %}<form method="post" action="/settings/runtime/{{ key }}">
+    {% if field.kind == 'bool' %}<select name="value"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>
+    {% else %}<input name="value" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}
+    <button class="button secondary" type="submit">{{ _('Save') }}</button>
+  </form>{% endif %}
+</div>
+{% endmacro %}
 <section class="settings-readonly-heading"><p class="eyebrow">{{ _('Album destinations and automation') }}</p><p>{{ _('Album destinations help') }}</p></section>
-<section class="panel settings-panel">
-  <div class="settings-row"><span>{{ _('Allow album moves') }}</span><strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ _('Enabled') if settings.enabled else _('Disabled') }}</strong></div>
-  <div class="settings-row"><span>{{ _('Move albums automatically after analysis') }}</span><strong>{{ _('Enabled') if settings.auto_route else _('Manual') }}</strong></div>
+<section class="panel settings-panel runtime-settings">
+  {{ runtime_field('file_operations', _('Allow album moves')) }}
+  {{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}
+  {{ runtime_field('staging_root', _('Approved albums (Picard)'), '/data/music/validator/staging') }}
+  {{ runtime_field('quarantine_root', _('Albums to review'), '/data/music/validator/quarantine') }}
+  {{ runtime_field('rejected_root', _('Rejected albums'), '/data/music/validator/rejected') }}
+  {{ runtime_field('movable_roots', _('Authorized source folders'), '/data/downloads:/data/music/legacy') }}
 </section>
 <section class="settings-grid">
 {% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}

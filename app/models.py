@@ -89,3 +89,10 @@ class AnalysisSource(Base):
     path: Mapped[str] = mapped_column(String, unique=True, index=True)
     kind: Mapped[str] = mapped_column(String, default="FILESYSTEM")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
+class ApplicationSetting(Base):
+    __tablename__ = "application_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)

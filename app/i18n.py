@@ -189,6 +189,10 @@ ITALIAN = {
     "Configure a source": "Configura una sorgente",
     "Showing first results": "Sono mostrati i primi 200 risultati. Continua a scrivere per affinare.",
     "Unable to update folder list.": "Impossibile aggiornare l'elenco delle cartelle.",
+    "Save": "Salva",
+    "Environment": "Ambiente",
+    "Database": "Database",
+    "Default": "Predefinito",
 }
 
 
