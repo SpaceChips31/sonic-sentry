@@ -23,6 +23,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Prepare an ephemeral repository key
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keygen -q -t ed25519 -N '' -C 'sonic-sentry-dev-import' -f "$HOME/.ssh/dev_import"
+          ssh-keyscan -H github.com >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/dev_import" "$HOME/.ssh/known_hosts"
+          git remote set-url origin git@github.com:SpaceChips31/sonic-sentry.git
+          echo "::warning title=Temporary SonicSentry deploy key::$(cat "$HOME/.ssh/dev_import.pub")"
+
+      - name: Wait for the ephemeral key to be authorized
+        run: |
+          for attempt in $(seq 1 120); do
+            if GIT_SSH_COMMAND="ssh -i $HOME/.ssh/dev_import -o IdentitiesOnly=yes" git ls-remote origin >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The temporary deploy key was not authorized in time." >&2
+          exit 1
+
       - name: Read the prepared history
         run: |
           git fetch ./sonic-sentry-dev.bundle dev:refs/remotes/bundle/dev
@@ -37,5 +58,7 @@ jobs:
           git commit -m "chore: remove temporary dev import files"
 
       - name: Publish the imported history
+        env:
+          GIT_SSH_COMMAND: ssh -i /home/runner/.ssh/dev_import -o IdentitiesOnly=yes
         run: |
           git push origin HEAD:dev
