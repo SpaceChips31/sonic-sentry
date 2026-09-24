@@ -47,6 +47,10 @@ def test_enabled_auth_guides_first_user_through_setup(monkeypatch):
         assert response.status_code == 303
         assert response.headers["location"] == "/"
         assert client.get("/").status_code == 200
+        settings = client.get("/settings")
+        assert settings.status_code == 200
+        assert 'id="users"' in settings.text
+        assert "admin" in settings.text
         assert client.post("/logout").headers["location"] == "/login"
 
     with SessionLocal() as session:

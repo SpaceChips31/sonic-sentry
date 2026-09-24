@@ -1,78 +1,48 @@
 {% extends "base.html" %}
 {% block title %}{{ _('Settings') }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-heading"><div><p class="eyebrow">{{ _('Configuration') }}</p><h1>{{ _('Settings') }}</h1></div></section>
-
-<section class="panel settings-panel editable-settings">
-  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Interface language') }}</h2><p>{{ _('Language help') }}</p></div></div>
-  <form class="language-form" method="post" action="/settings/language">
-    <select name="language">
-      <option value="auto" {{ 'selected' if language_preference == 'auto' }}>{{ _('Automatic (browser)') }} — {{ effective_language|upper }}</option>
-      <option value="it" {{ 'selected' if language_preference == 'it' }}>Italiano</option>
-      <option value="en" {{ 'selected' if language_preference == 'en' }}>English</option>
-    </select>
-    <button class="button success" type="submit">{{ _('Save language') }}</button>
-  </form>
+<section class="page-heading settings-heading">
+  <div><p class="eyebrow">{{ _('Configuration') }}</p><h1>{{ _('Settings') }}</h1><p>{{ _('Settings introduction') }}</p></div>
+  <div class="settings-heading-actions"><button class="button secondary" id="advanced-toggle" type="button" aria-pressed="false">{{ _('Show advanced') }}</button><button class="button success" type="submit" form="settings-form">{{ _('Save changes') }}</button></div>
 </section>
-
-<section class="panel settings-panel source-settings">
-  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Folders to analyze') }}</h2><p>{{ _('Folders to analyze help') }}</p></div></div>
-  <div class="source-list">
-  {% for source in sources %}
-    <div class="source-item {{ 'disabled' if not source.enabled }}">
-      <span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span>
-      <span class="source-actions">
-        {% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
-        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}
-      </span>
-    </div>
-  {% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}
+{% if request.query_params.get('saved') %}<div class="settings-saved" role="status">{{ _('Settings saved') }}</div>{% endif %}
+<div class="settings-layout">
+  <aside class="settings-sidebar panel" aria-label="{{ _('Settings sections') }}">
+    <a href="#general">{{ _('General') }}</a><a href="#workflow">{{ _('Workflow') }}</a><a href="#sources">{{ _('Analysis sources') }}</a><a href="#security">{{ _('Security') }}</a>{% if auth_enabled %}<a href="#users">{{ _('Users') }}</a>{% endif %}<a href="#storage">{{ _('Storage status') }}</a><a class="advanced-setting" href="#advanced">{{ _('Advanced') }}</a>
+  </aside>
+  <div class="settings-content">
+    <form id="settings-form" method="post" action="/settings/save" data-settings-form>
+      <section class="panel settings-panel settings-section" id="general">
+        <div class="section-heading"><div><p class="eyebrow">{{ _('General') }}</p><h2>{{ _('Interface') }}</h2><p>{{ _('Language help') }}</p></div></div>
+        <div class="runtime-setting"><div class="runtime-setting-label"><strong>{{ _('Interface language') }}</strong></div><select name="language"><option value="auto" {{ 'selected' if language_preference == 'auto' }}>{{ _('Automatic (browser)') }} — {{ effective_language|upper }}</option><option value="it" {{ 'selected' if language_preference == 'it' }}>Italiano</option><option value="en" {{ 'selected' if language_preference == 'en' }}>English</option></select></div>
+      </section>
+      {% macro runtime_field(key, label, help='', placeholder='', advanced=false) %}{% set field = settings.fields[key] %}
+      <div class="runtime-setting {{ 'locked' if field.locked }} {{ 'advanced-setting' if advanced }}"><div class="runtime-setting-label"><strong>{{ label }}</strong>{% if help %}<span>{{ help }}</span>{% endif %}<small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>{% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>{% elif field.kind == 'bool' %}<select name="setting_{{ key }}"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>{% else %}<input name="setting_{{ key }}" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}</div>
+      {% endmacro %}
+      <section class="panel settings-panel settings-section" id="workflow">
+        <div class="section-heading"><div><p class="eyebrow">{{ _('Workflow') }}</p><h2>{{ _('Album destinations and automation') }}</h2><p>{{ _('Album destinations help') }}</p></div></div>
+        {{ runtime_field('file_operations', _('Allow album moves')) }}{{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}{{ runtime_field('staging_root', _('Approved albums (Picard)'), '', '/data/music/validator/staging') }}{{ runtime_field('quarantine_root', _('Albums to review'), '', '/data/music/validator/quarantine') }}{{ runtime_field('rejected_root', _('Rejected albums'), '', '/data/music/validator/rejected') }}
+      </section>
+      <section class="panel settings-panel settings-section" id="security">
+        <div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Authentication') }}</h2><p>{{ _('Authentication help') }}</p></div></div>{{ runtime_field('auth_enabled', _('Require login')) }}{% if auth_enabled %}<p class="settings-inline-note">{{ _('Authentication enabled help') }}</p>{% endif %}
+      </section>
+      <section class="panel settings-panel settings-section advanced-setting" id="advanced">
+        <div class="section-heading"><div><p class="eyebrow">{{ _('Advanced') }}</p><h2>{{ _('Advanced settings') }}</h2><p>{{ _('Advanced settings help') }}</p></div></div>{{ runtime_field('movable_roots', _('Authorized source folders'), _('Authorized source folders help'), '/data/downloads:/data/music/legacy', true) }}{{ runtime_field('worker_concurrency', _('Simultaneous analyses'), _('Worker concurrency help'), '', true) }}
+      </section>
+    </form>
+    <section class="panel settings-panel settings-section source-settings" id="sources">
+      <div class="section-heading"><div><p class="eyebrow">{{ _('Analysis sources') }}</p><h2>{{ _('Folders to analyze') }}</h2><p>{{ _('Folders to analyze help') }}</p></div></div><div class="source-list">{% for source in sources %}<div class="source-item {{ 'disabled' if not source.enabled }}"><span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span><span class="source-actions">{% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form><form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}</span></div>{% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}</div>
+      <form class="source-form" method="post" action="/settings/sources"><label>{{ _('Name') }}<input name="name" required placeholder="qBittorrent"></label><label>{{ _('Type') }}<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">{{ _('Other') }}</option></select></label><label>{{ _('Container path') }}<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label><button class="button success" type="submit">{{ _('Add source') }}</button></form>
+    </section>
+    {% if auth_enabled %}<section class="panel settings-panel settings-section" id="users">
+      <div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Local users') }}</h2><p>{{ _('Local users help') }}</p></div></div>
+      {% if request.state.user and request.state.user.is_admin %}<div class="source-list">{% for user in users %}<div class="source-item {{ 'disabled' if not user.active }}"><span><strong>{{ user.username }}</strong><small>{{ _('Administrator') if user.is_admin else _('User') }} · {{ _('Enabled') if user.active else _('Disabled') }}</small></span>{% if user.id != request.state.user.id %}<form method="post" action="/settings/users/{{ user.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if user.active else _('Enable') }}</button></form>{% endif %}</div>{% endfor %}</div><form class="source-form user-form" method="post" action="/settings/users"><label>{{ _('Username') }}<input name="username" minlength="3" required></label><label>{{ _('Password') }}<input name="password" type="password" minlength="10" required></label><label class="checkbox-label"><input name="admin" type="checkbox" value="true"> {{ _('Administrator') }}</label><button class="button success" type="submit">{{ _('Add user') }}</button></form>{% endif %}
+      {% if request.state.user %}<form class="password-form" method="post" action="/account/password"><h3>{{ _('Change password') }}</h3><label>{{ _('Current password') }}<input name="current_password" type="password" required></label><label>{{ _('New password') }}<input name="new_password" type="password" minlength="10" required></label><button class="button secondary" type="submit">{{ _('Change password') }}</button></form>{% endif %}
+    </section>{% endif %}
+    <section class="settings-section" id="storage"><div class="settings-grid">{% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}<article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>{% endfor %}</div></section>
   </div>
-  <form class="source-form" method="post" action="/settings/sources">
-    <label>{{ _('Name') }}<input name="name" required placeholder="qBittorrent"></label>
-    <label>{{ _('Type') }}<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">{{ _('Other') }}</option></select></label>
-    <label class="source-path-input">{{ _('Container path') }}<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label>
-    <button class="button success" type="submit">{{ _('Add source') }}</button>
-  </form>
-</section>
-
-{% macro runtime_field(key, label, placeholder='') %}
-{% set field = settings.fields[key] %}
-<div class="runtime-setting {{ 'locked' if field.locked }}">
-  <div class="runtime-setting-label"><strong>{{ label }}</strong><small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>
-  {% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>
-  {% else %}<form method="post" action="/settings/runtime/{{ key }}">
-    {% if field.kind == 'bool' %}<select name="value"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>
-    {% else %}<input name="value" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}
-    <button class="button secondary" type="submit">{{ _('Save') }}</button>
-  </form>{% endif %}
 </div>
-{% endmacro %}
-<section class="settings-readonly-heading"><p class="eyebrow">{{ _('Album destinations and automation') }}</p><p>{{ _('Album destinations help') }}</p></section>
-<section class="panel settings-panel runtime-settings">
-  {{ runtime_field('file_operations', _('Allow album moves')) }}
-  {{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}
-  {{ runtime_field('staging_root', _('Approved albums (Picard)'), '/data/music/validator/staging') }}
-  {{ runtime_field('quarantine_root', _('Albums to review'), '/data/music/validator/quarantine') }}
-  {{ runtime_field('rejected_root', _('Rejected albums'), '/data/music/validator/rejected') }}
-  {{ runtime_field('movable_roots', _('Authorized source folders'), '/data/downloads:/data/music/legacy') }}
-  {{ runtime_field('auth_enabled', _('Require login')) }}
-  {{ runtime_field('worker_concurrency', _('Simultaneous analyses')) }}
-</section>
-{% if request.state.user %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Change password') }}</h2></div></div><form class="source-form" method="post" action="/account/password"><label>{{ _('Current password') }}<input name="current_password" type="password" required></label><label>{{ _('New password') }}<input name="new_password" type="password" minlength="10" required></label><button class="button secondary" type="submit">{{ _('Change password') }}</button></form></section>{% endif %}
-{% if request.state.user and request.state.user.is_admin %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Local users') }}</h2></div></div><div class="source-list">{% for user in users %}<div class="source-item {{ 'disabled' if not user.active }}"><span><strong>{{ user.username }}</strong><small>{{ _('Administrator') if user.is_admin else _('User') }} · {{ _('Enabled') if user.active else _('Disabled') }}</small></span>{% if user.id != request.state.user.id %}<form method="post" action="/settings/users/{{ user.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if user.active else _('Enable') }}</button></form>{% endif %}</div>{% endfor %}</div><form class="source-form" method="post" action="/settings/users"><label>{{ _('Username') }}<input name="username" minlength="3" required></label><label>{{ _('Password') }}<input name="password" type="password" minlength="10" required></label><label><input name="admin" type="checkbox" value="true"> {{ _('Administrator') }}</label><button class="button success" type="submit">{{ _('Add user') }}</button></form></section>{% endif %}
-<section class="settings-grid">
-{% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
-<article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>
-{% endfor %}
-</section>
-<section class="panel settings-panel"><h2>{{ _('Authorized source folders') }}</h2><p class="settings-explanation">{{ _('Authorized source folders help') }}</p>{% for item in settings.movable_roots %}<div class="settings-row"><code>{{ item.path }}</code><span><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></span></div>{% else %}<p class="settings-warning">{{ _('No authorized source folders') }}</p>{% endfor %}</section>
-<details class="panel settings-help settings-advanced"><summary><strong>{{ _('Advanced technical settings') }}</strong><span>{{ _('Advanced technical settings help') }}</span></summary><dl>
-<div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>{{ _('Allow album moves') }}</dd></div>
-<div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>{{ _('Move albums automatically after analysis') }}</dd></div>
-<div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>{{ _('Authorized source folders') }}</dd></div>
-<div><dt>LOSSLESS_STAGING_ROOT</dt><dd>{{ _('Approved albums (Picard)') }}</dd></div>
-<div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>{{ _('Albums to review') }}</dd></div>
-<div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>{{ _('Rejected albums') }}</dd></div>
-</dl></details>
 {% endblock %}
+{% block scripts %}<script>
+(() => { const form=document.querySelector('[data-settings-form]'), toggle=document.getElementById('advanced-toggle'); let dirty=false; const show=value=>{document.body.classList.toggle('show-advanced-settings',value);toggle.setAttribute('aria-pressed',String(value));toggle.textContent=value?{{ _('Hide advanced')|tojson }}:{{ _('Show advanced')|tojson }};}; show(localStorage.getItem('sonic-sentry-advanced')==='true'); toggle.addEventListener('click',()=>{const value=toggle.getAttribute('aria-pressed')!=='true';localStorage.setItem('sonic-sentry-advanced',String(value));show(value);}); form.addEventListener('input',()=>dirty=true);form.addEventListener('change',()=>dirty=true);form.addEventListener('submit',()=>dirty=false);window.addEventListener('beforeunload',event=>{if(!dirty)return;event.preventDefault();event.returnValue='';}); })();
+</script>{% endblock %}

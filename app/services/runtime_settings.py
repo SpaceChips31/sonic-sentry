@@ -99,18 +99,26 @@ def normalize_value(spec: SettingSpec, value: str) -> str:
 
 
 def set_value(key: str, value: str) -> None:
-    if key not in SPECS:
-        raise SettingError("Unknown setting")
-    if is_locked(key):
-        raise SettingError(f"{SPECS[key].env} is fixed by the environment")
-    normalized = normalize_value(SPECS[key], value)
+    set_values({key: value})
+
+
+def set_values(values: dict[str, str]) -> None:
+    """Validate and persist a settings form as one transaction."""
+    normalized_values: dict[str, str] = {}
+    for key, value in values.items():
+        if key not in SPECS:
+            raise SettingError("Unknown setting")
+        if is_locked(key):
+            raise SettingError(f"{SPECS[key].env} is fixed by the environment")
+        normalized_values[key] = normalize_value(SPECS[key], value)
+
     with SessionLocal() as session:
-        setting = session.get(ApplicationSetting, key)
-        if setting is None:
-            setting = ApplicationSetting(key=key, value=normalized)
-            session.add(setting)
-        else:
-            setting.value = normalized
+        for key, normalized in normalized_values.items():
+            setting = session.get(ApplicationSetting, key)
+            if setting is None:
+                session.add(ApplicationSetting(key=key, value=normalized))
+            else:
+                setting.value = normalized
         session.commit()
 
 

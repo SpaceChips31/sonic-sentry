@@ -56,7 +56,7 @@ RUN mkdir -p /app/data /app/reports /app/uploads \
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    LOSSLESS_VALIDATOR_VERSION="${VERSION}" \
+    SONIC_SENTRY_VERSION="${VERSION}" \
     LOSSLESS_VALIDATOR_DATA_DIR=/app/data \
     LOSSLESS_REPORT_ROOT=/app/reports \
     LOSSLESS_UPLOAD_ROOT=/app/uploads

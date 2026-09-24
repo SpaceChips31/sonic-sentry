@@ -1,14 +1,13 @@
 name: sonic-sentry
 
 x-app: &app
-  image: "${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}:${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
+  image: "${SONIC_SENTRY_IMAGE:-ghcr.io/spacechips31/sonic-sentry:0.1.1}"
   user: "${PUID:-1000}:${PGID:-1000}"
   init: true
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
   environment: &app-environment
-    - "LOSSLESS_VALIDATOR_VERSION=${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
     - LOSSLESS_VALIDATOR_DATA_DIR=/app/data
     - LOSSLESS_REPORT_ROOT=/app/reports
     - LOSSLESS_UPLOAD_ROOT=/app/uploads

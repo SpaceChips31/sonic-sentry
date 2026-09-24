@@ -4,7 +4,7 @@ import pytest
 
 from app.database import Base, SessionLocal, engine
 from app.models import ApplicationSetting
-from app.services.runtime_settings import SettingError, describe, set_value
+from app.services.runtime_settings import SettingError, describe, set_value, set_values
 
 
 @pytest.fixture(autouse=True)
@@ -45,3 +45,15 @@ def test_worker_concurrency_is_bounded():
     assert describe("worker_concurrency")["value"] == "4"
     with pytest.raises(SettingError):
         set_value("worker_concurrency", "9")
+
+
+def test_bulk_settings_are_saved_together():
+    set_values({"file_operations": "true", "worker_concurrency": "3"})
+    assert describe("file_operations")["value"] == "true"
+    assert describe("worker_concurrency")["value"] == "3"
+
+
+def test_bulk_settings_do_not_partially_save_on_validation_error():
+    with pytest.raises(SettingError):
+        set_values({"file_operations": "true", "worker_concurrency": "99"})
+    assert describe("file_operations")["source"] == "default"

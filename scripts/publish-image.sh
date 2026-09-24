@@ -16,7 +16,7 @@ case "$version" in
         ;;
 esac
 
-registry_image=${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}
+registry_image=${SONIC_SENTRY_REGISTRY_IMAGE:-ghcr.io/spacechips31/sonic-sentry}
 minor=${version%.*}
 revision=$(git rev-parse HEAD 2>/dev/null || printf unknown)
 build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)

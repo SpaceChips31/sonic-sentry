@@ -82,7 +82,7 @@ The music library remains outside the container under `MEDIA_ROOT`.
 
 ## Updating
 
-Set the desired version in `.env`, then run:
+Set the desired image in `.env`, then run:
 
 ```sh
 docker compose pull
@@ -92,8 +92,7 @@ docker compose up -d --remove-orphans
 For SonicSentry 0.1.1:
 
 ```env
-LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
-LOSSLESS_VALIDATOR_VERSION=0.1.1
+SONIC_SENTRY_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.1.1
 ```
 
 ## Local development

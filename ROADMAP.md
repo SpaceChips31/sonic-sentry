@@ -12,6 +12,14 @@ promises and may be reordered as the real music workflow evolves.
 - Optional trusted-proxy and single-sign-on support for homelab deployments
 - First-run setup that remains disabled when authentication is not requested
 
+## Configuration
+
+- Sectioned settings workspace with sidebar and one global save action (implemented on `dev`)
+- Environment-owned settings shown as locked and database-owned settings editable (implemented on `dev`)
+- Unsaved-change warning and optional advanced settings view (implemented on `dev`)
+- Additional policy flags for routing, review thresholds, retention, and integrations
+- Import and export of configuration for backup or migration
+
 Authentication must remain optional so SonicSentry can still run safely on a
 trusted private network without adding unnecessary setup.
 
@@ -43,3 +51,4 @@ trusted private network without adding unnecessary setup.
 - Health and metrics endpoints suitable for monitoring
 - Multi-architecture container images
 - Configurable retention for reports, uploads, and completed jobs
+- Display the application version embedded in the container image rather than a runtime version variable (implemented on `dev`)

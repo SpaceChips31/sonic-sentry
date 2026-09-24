@@ -16,7 +16,7 @@ from app.services.file_workflow import (
     undo_move,
 )
 from app.services.sources import SourceConfigurationError, add_source
-from app.services.runtime_settings import SettingError, set_value
+from app.services.runtime_settings import SPECS, SettingError, bool_value, set_value, set_values
 from app.auth import require_admin
 
 
@@ -42,8 +42,38 @@ def settings_page(request: Request):
             "language_preference": request.cookies.get("lv_language", "auto"),
             "effective_language": resolve_language(request),
             "users": users,
+            "auth_enabled": bool_value("auth_enabled"),
         },
     )
+
+
+@router.post("/settings/save")
+async def save_settings(request: Request):
+    require_admin(request)
+    form = await request.form()
+    language = str(form.get("language", "auto"))
+    if language not in {"auto", "it", "en"}:
+        raise HTTPException(status_code=400, detail="Invalid language")
+
+    updates = {
+        key: str(form[f"setting_{key}"])
+        for key in SPECS
+        if f"setting_{key}" in form
+    }
+    try:
+        set_values(updates)
+    except SettingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    response = RedirectResponse("/settings?saved=1", status_code=303)
+    if language == "auto":
+        response.delete_cookie("lv_language")
+    else:
+        response.set_cookie(
+            "lv_language", language, max_age=60 * 60 * 24 * 365,
+            httponly=True, samesite="lax",
+        )
+    return response
 
 
 @router.post("/settings/language")
