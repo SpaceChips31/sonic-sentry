@@ -27,6 +27,16 @@ LABELS = {
             "FAKE_LOSSLESS": "Il contenitore è lossless, ma il contenuto sembra provenire da una sorgente compressa.",
             "UPSCALED": "La risoluzione dichiarata sembra superiore a quella realmente presente nell'audio.",
         },
+        "recommendation": {
+            "GENUINE": "Puoi conservarla: non sono emersi segnali che richiedano interventi.",
+            "SUSPICIOUS": "Confrontala con le altre tracce dell'album prima di decidere.",
+            "KNOWN_LOSSY": "Se cerchi una copia realmente lossless, conviene sostituire questa versione.",
+            "LOSSY": "Se cerchi una copia realmente lossless, conviene sostituire questa versione.",
+            "PROBABLE_TRANSCODE": "Conviene cercare un'altra copia o verificare la provenienza del rip.",
+            "FAKE": "Conviene sostituire il file con una sorgente lossless verificata.",
+            "FAKE_LOSSLESS": "Conviene sostituire il file con una sorgente lossless verificata.",
+            "UPSCALED": "Mantienila solo se non esiste una versione alla risoluzione originale.",
+        },
     },
     "en": {
         "status": {"PASS": "Pass", "QUARANTINE": "Review", "REJECTED": "Rejected"},
@@ -46,6 +56,16 @@ LABELS = {
             "FAKE": "The container is lossless, but its content appears to originate from a compressed source.",
             "FAKE_LOSSLESS": "The container is lossless, but its content appears to originate from a compressed source.",
             "UPSCALED": "The declared resolution appears higher than the audio content actually provides.",
+        },
+        "recommendation": {
+            "GENUINE": "Keep it: no indicators currently require action.",
+            "SUSPICIOUS": "Compare it with the rest of the album before deciding.",
+            "KNOWN_LOSSY": "Replace this version if you require a genuinely lossless copy.",
+            "LOSSY": "Replace this version if you require a genuinely lossless copy.",
+            "PROBABLE_TRANSCODE": "Look for another copy or verify the origin of the rip.",
+            "FAKE": "Replace the file with a verified lossless source.",
+            "FAKE_LOSSLESS": "Replace the file with a verified lossless source.",
+            "UPSCALED": "Keep it only if the original-resolution version is unavailable.",
         },
     },
 }
@@ -136,6 +156,13 @@ def configure_templates(templates: Jinja2Templates) -> Jinja2Templates:
         return LABELS[language]["summary"].get(key, fallback)
 
     @pass_context
+    def verdict_recommendation(context, value):
+        language = resolve_language(context.get("request"))
+        key = _normalized(value)
+        fallback = "Valuta il risultato insieme agli altri dati dell'album." if language == "it" else "Consider the result together with the rest of the album data."
+        return LABELS[language]["recommendation"].get(key, fallback)
+
+    @pass_context
     def evidence(context, value):
         return localized_evidence(value, resolve_language(context.get("request")))
 
@@ -150,6 +177,7 @@ def configure_templates(templates: Jinja2Templates) -> Jinja2Templates:
     templates.env.filters["human_review"] = human_review
     templates.env.filters["verdict_tone"] = verdict_tone
     templates.env.filters["verdict_summary"] = verdict_summary
+    templates.env.filters["verdict_recommendation"] = verdict_recommendation
     templates.env.filters["evidence_text"] = evidence
     templates.env.filters["spectral_interp"] = spectral_interp
     return templates

@@ -6,15 +6,18 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.i18n import resolve_language
-from app.models import AnalysisSource, Release
+from app.models import AnalysisSource, Release, User
 from app.presentation import configure_templates
 from app.services.file_workflow import (
     FileOperationError,
     delete_release_files,
     move_release,
     settings_snapshot,
+    undo_move,
 )
 from app.services.sources import SourceConfigurationError, add_source
+from app.services.runtime_settings import SettingError, set_value
+from app.auth import require_admin
 
 
 router = APIRouter()
@@ -29,6 +32,7 @@ def settings_page(request: Request):
                 select(AnalysisSource).order_by(AnalysisSource.name, AnalysisSource.id)
             ).all()
         )
+        users = list(session.scalars(select(User).order_by(User.username)).all())
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
@@ -37,6 +41,7 @@ def settings_page(request: Request):
             "sources": sources,
             "language_preference": request.cookies.get("lv_language", "auto"),
             "effective_language": resolve_language(request),
+            "users": users,
         },
     )
 
@@ -61,10 +66,12 @@ def set_language(language: str = Form(...)):
 
 @router.post("/settings/sources")
 def create_source(
+    request: Request,
     name: str = Form(...),
     path: str = Form(...),
     kind: str = Form(...),
 ):
+    require_admin(request)
     try:
         add_source(name, path, kind)
     except SourceConfigurationError as exc:
@@ -73,32 +80,50 @@ def create_source(
 
 
 @router.post("/settings/sources/{source_id}/toggle")
-def toggle_source(source_id: int):
+def toggle_source(request: Request, source_id: int):
+    require_admin(request)
     with SessionLocal() as session:
         source = session.get(AnalysisSource, source_id)
         if source is None:
             raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        if source.locked:
+            raise HTTPException(status_code=409, detail="Source is fixed by LOSSLESS_SOURCE_ROOTS")
         source.enabled = not source.enabled
         session.commit()
     return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/sources/{source_id}/delete")
-def delete_source(source_id: int):
+def delete_source(request: Request, source_id: int):
+    require_admin(request)
     with SessionLocal() as session:
         source = session.get(AnalysisSource, source_id)
         if source is None:
             raise HTTPException(status_code=404, detail="Sorgente non trovata")
+        if source.locked:
+            raise HTTPException(status_code=409, detail="Source is fixed by LOSSLESS_SOURCE_ROOTS")
         session.delete(source)
         session.commit()
     return RedirectResponse("/settings", status_code=303)
 
 
+@router.post("/settings/runtime/{key}")
+def update_runtime_setting(request: Request, key: str, value: str = Form("")):
+    require_admin(request)
+    try:
+        set_value(key, value)
+    except SettingError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse("/settings", status_code=303)
+
+
 @router.post("/releases/{release_id}/files")
 def release_file_action(
+    request: Request,
     release_id: int,
     action: str = Form(...),
 ):
+    require_admin(request)
     try:
         if action == "manual-pass":
             move_release(release_id, "STAGING", manual_pass=True)
@@ -115,3 +140,13 @@ def release_file_action(
         f"/releases/{release_id}",
         status_code=303,
     )
+
+
+@router.post("/releases/{release_id}/files/undo/{operation_id}")
+def undo_release_file_action(request: Request, release_id: int, operation_id: int):
+    require_admin(request)
+    try:
+        undo_move(release_id, operation_id)
+    except FileOperationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(f"/releases/{release_id}", status_code=303)

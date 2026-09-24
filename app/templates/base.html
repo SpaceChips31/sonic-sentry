@@ -15,8 +15,10 @@
     <nav class="main-nav" aria-label="{{ _('Main navigation') }}">
         <a href="/">{{ _('Dashboard') }}</a>
         <a href="/analyses">{{ _('Queue') }}</a>
+        <a href="/reviews">{{ _('Reviews') }}</a>
         <a href="/settings">{{ _('Settings') }}</a>
         <a class="nav-primary" href="/analyses/new">{{ _('New analysis') }}</a>
+        {% if request.state.user %}<form method="post" action="/logout"><button class="nav-logout" type="submit">{{ request.state.user.username }} · {{ _('Logout') }}</button></form>{% endif %}
     </nav>
 </header>
 <main class="container">{% block content %}{% endblock %}</main>

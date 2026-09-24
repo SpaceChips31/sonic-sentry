@@ -12,6 +12,11 @@ from app.models import AnalysisSource
 
 SOURCE_BASE = Path(os.getenv("LOSSLESS_SOURCE_BASE", "/data")).resolve()
 SOURCE_KINDS = {"FILESYSTEM", "SLSKD", "QBITTORRENT", "NZBGET", "OTHER"}
+ENV_SOURCE_PATHS = {
+    str(Path(item).resolve())
+    for item in os.environ.get("LOSSLESS_SOURCE_ROOTS", "").split(os.pathsep)
+    if item.strip()
+} if "LOSSLESS_SOURCE_ROOTS" in os.environ else set()
 
 
 class SourceConfigurationError(ValueError):
@@ -58,15 +63,28 @@ def seed_analysis_sources() -> None:
     )
 
     with SessionLocal() as session:
-        existing = set(session.scalars(select(AnalysisSource.path)).all())
+        existing = {
+            source.path: source
+            for source in session.scalars(select(AnalysisSource)).all()
+        }
         seen = set(existing)
         for candidate in candidates:
             path = candidate.resolve()
             path_text = str(path)
-            if path_text in seen or not path.is_dir():
+            if not path.is_dir():
+                continue
+            if path_text in existing:
+                if path_text in ENV_SOURCE_PATHS:
+                    existing[path_text].locked = True
                 continue
             name, kind = infer_source(path.name, path)
-            session.add(AnalysisSource(name=name, path=path_text, kind=kind, enabled=True))
+            session.add(AnalysisSource(
+                name=name,
+                path=path_text,
+                kind=kind,
+                enabled=True,
+                locked=path_text in ENV_SOURCE_PATHS,
+            ))
             seen.add(path_text)
         session.commit()
 

@@ -14,13 +14,14 @@ RUN python -m pip wheel \
 
 FROM python:3.13-slim
 
-ARG VERSION=0.1.0
+ARG VERSION=0.1.1
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
 LABEL org.opencontainers.image.title="SonicSentry" \
       org.opencontainers.image.description="Audio quality gate for FLAC integrity and forensic analysis" \
       org.opencontainers.image.source="https://github.com/SpaceChips31/sonic-sentry" \
+      org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}"
@@ -46,6 +47,8 @@ WORKDIR /app
 
 COPY app/ /app/app/
 COPY validator/ /app/validator/
+COPY LICENSE THIRD_PARTY_NOTICES.md /licenses/
+COPY vendor/audio-forensic/LICENSE /licenses/audio-forensic-LICENSE
 
 RUN mkdir -p /app/data /app/reports /app/uploads \
  && chown -R validator:validator \
@@ -56,8 +59,7 @@ ENV PYTHONUNBUFFERED=1 \
     LOSSLESS_VALIDATOR_VERSION="${VERSION}" \
     LOSSLESS_VALIDATOR_DATA_DIR=/app/data \
     LOSSLESS_REPORT_ROOT=/app/reports \
-    LOSSLESS_UPLOAD_ROOT=/app/uploads \
-    LOSSLESS_SOURCE_ROOTS=/data/downloads/soulseek:/data/music/legacy
+    LOSSLESS_UPLOAD_ROOT=/app/uploads
 
 USER validator
 

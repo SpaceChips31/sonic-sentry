@@ -16,6 +16,10 @@ rejected area.
 - routes complete album directories without overwriting existing destinations
 - recovers interrupted queue jobs after a worker restart
 - stores its database, reports, uploads, and settings in persistent volumes
+- optionally protects the interface with local administrator and operator accounts
+- provides selectable, pausable, resumable, and cancellable analysis batches
+- supports quick multi-track review, album decisions, notes, and audit history
+- compares uncertain tracks with their album and generates spectrograms on demand
 
 ## Production deployment
 
@@ -54,12 +58,11 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.1.0`), the minor release
+Available release tags include the exact version (`0.1.1`), the minor release
 (`0.1`), and `latest`. Production deployments should prefer the exact
 version.
 
-If the GitHub Container Registry package is private, authenticate once before
-pulling:
+For a private fork or private package, authenticate before pulling:
 
 ```sh
 docker login ghcr.io
@@ -86,11 +89,11 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.1.0:
+For SonicSentry 0.1.1:
 
 ```env
 LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
-LOSSLESS_VALIDATOR_VERSION=0.1.0
+LOSSLESS_VALIDATOR_VERSION=0.1.1
 ```
 
 ## Local development
@@ -101,11 +104,27 @@ docker compose -f compose.yml -f compose.dev.yml build
 docker compose -f compose.yml -f compose.dev.yml up -d
 ```
 
+Builds from the `dev` branch are published as
+`ghcr.io/spacechips31/sonic-sentry:dev`. They are intended for isolated test
+deployments and should not replace the stable container without a backup.
+
+## Configuration ownership
+
+Workflow settings can be managed from the web interface. If a corresponding
+environment variable is explicitly supplied by Docker Compose or the runtime,
+SonicSentry displays a lock and treats that value as read-only. Variables that
+are absent from the container environment use application defaults and remain
+editable in the database.
+
+Authentication is disabled by default. Enable it in Settings, or lock it at
+deployment time with `SONIC_SENTRY_AUTH_ENABLED=true`. SonicSentry then guides
+you through creating the first administrator.
+
 ## Releasing
 
-Pushing a semantic version tag such as `v0.1.0` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.1.1` runs the GitHub Actions
 publication workflow. It builds the image once and publishes the corresponding
-`0.1.0`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
+`0.1.1`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -121,3 +140,20 @@ The command-line validator returns:
 The tested engine and its Python dependencies are stored under
 `vendor/audio-forensic`. Provenance is documented in
 `vendor/audio-forensic/SOURCE.md`.
+
+## License and attribution
+
+SonicSentry is released under the [MIT License](LICENSE). You may use, modify,
+redistribute, and use it commercially, provided that the copyright and license
+notice are retained.
+
+The vendored `audio-forensic` engine is copyright Bishal Das and is also
+licensed under MIT. SonicSentry additionally uses third-party Python packages
+and separate audio command-line tools under their own licenses. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for sources, licenses, and
+attributions.
+
+## Roadmap
+
+Planned post-0.1 work, including optional local authentication, is tracked in
+[ROADMAP.md](ROADMAP.md).

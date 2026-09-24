@@ -7,22 +7,20 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.config import (
-    AUTO_ROUTE_RELEASES,
-    FILE_OPERATIONS_ENABLED,
-    MOVABLE_ROOTS,
-    QUARANTINE_ROOT,
-    REJECTED_ROOT,
-    STAGING_ROOT,
-)
 from app.database import SessionLocal
 from app.models import Release, ReleaseOperation, Track
+from app.services.runtime_settings import (
+    bool_value,
+    describe as describe_setting,
+    path_value,
+    paths_value,
+)
 
 
-TARGET_ROOTS = {
-    "STAGING": STAGING_ROOT,
-    "QUARANTINE": QUARANTINE_ROOT,
-    "REJECTED": REJECTED_ROOT,
+TARGET_KEYS = {
+    "STAGING": "staging_root",
+    "QUARANTINE": "quarantine_root",
+    "REJECTED": "rejected_root",
 }
 
 
@@ -47,7 +45,8 @@ def is_within(path: Path, roots: tuple[Path, ...]) -> bool:
 
 
 def configured_target(kind: str) -> Path:
-    target = TARGET_ROOTS.get(kind)
+    key = TARGET_KEYS.get(kind)
+    target = path_value(key) if key else None
     if target is None:
         raise FileOperationError(f"{kind.lower()} destination is not configured")
     return target
@@ -55,11 +54,11 @@ def configured_target(kind: str) -> Path:
 
 def validate_source(path: Path) -> Path:
     source = path.resolve()
-    if not FILE_OPERATIONS_ENABLED:
+    if not bool_value("file_operations"):
         raise FileOperationError("file operations are disabled")
     if not source.is_dir():
         raise FileOperationError(f"source directory does not exist: {source}")
-    if not is_within(source, MOVABLE_ROOTS):
+    if not is_within(source, paths_value("movable_roots")):
         raise FileOperationError(
             "source is outside LOSSLESS_MOVABLE_ROOTS"
         )
@@ -161,8 +160,46 @@ def delete_release_files(release_id: int) -> None:
         session.commit()
 
 
+def undo_move(release_id: int, operation_id: int) -> Path:
+    with SessionLocal() as session:
+        release = session.scalar(
+            select(Release)
+            .where(Release.id == release_id)
+            .options(selectinload(Release.tracks), selectinload(Release.operations))
+        )
+        if release is None:
+            raise FileOperationError("release not found")
+        operation = next((item for item in release.operations if item.id == operation_id), None)
+        if operation is None or not operation.action.startswith(("MOVE_TO_", "MANUAL_PASS_TO_")):
+            raise FileOperationError("operation cannot be undone")
+        if release.operations and release.operations[0].id != operation.id:
+            raise FileOperationError("only the latest file operation can be undone")
+        current = validate_source(Path(release.source_path))
+        if operation.destination_path is None or current != Path(operation.destination_path).resolve():
+            raise FileOperationError("release is no longer at the recorded destination")
+        original = Path(operation.source_path).resolve()
+        if not is_within(original, paths_value("movable_roots")):
+            raise FileOperationError("original location is outside the authorized folders")
+        if original.exists():
+            raise FileOperationError("original location is no longer available")
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(current), str(original))
+        update_paths(release, current, original)
+        session.add(
+            ReleaseOperation(
+                release_id=release.id,
+                action=f"UNDO_{operation.action}",
+                source_path=str(current),
+                destination_path=str(original),
+                created_at=utc_now(),
+            )
+        )
+        session.commit()
+        return original
+
+
 def auto_route_release(release_id: int) -> Path | None:
-    if not FILE_OPERATIONS_ENABLED or not AUTO_ROUTE_RELEASES:
+    if not bool_value("file_operations") or not bool_value("auto_route"):
         return None
 
     with SessionLocal() as session:
@@ -181,7 +218,7 @@ def auto_route_release(release_id: int) -> Path | None:
 
 
 def settings_snapshot() -> dict:
-    def describe(path: Path | None) -> dict:
+    def describe_path(path: Path | None) -> dict:
         if path is None:
             return {
                 "path": "Not configured",
@@ -195,12 +232,17 @@ def settings_snapshot() -> dict:
         }
 
     return {
-        "enabled": FILE_OPERATIONS_ENABLED,
-        "auto_route": AUTO_ROUTE_RELEASES,
-        "movable_roots": [describe(path) for path in MOVABLE_ROOTS],
-        "staging": describe(STAGING_ROOT),
-        "quarantine": describe(QUARANTINE_ROOT),
-        "rejected": describe(REJECTED_ROOT),
+        "enabled": bool_value("file_operations"),
+        "auto_route": bool_value("auto_route"),
+        "movable_roots": [describe_path(path) for path in paths_value("movable_roots")],
+        "staging": describe_path(path_value("staging_root")),
+        "quarantine": describe_path(path_value("quarantine_root")),
+        "rejected": describe_path(path_value("rejected_root")),
+        "fields": {key: describe_setting(key) for key in (
+            "file_operations", "auto_route", "movable_roots",
+            "staging_root", "quarantine_root", "rejected_root", "auth_enabled",
+            "worker_concurrency",
+        )},
     }
 
 

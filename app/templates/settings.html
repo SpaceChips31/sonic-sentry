@@ -20,10 +20,10 @@
   <div class="source-list">
   {% for source in sources %}
     <div class="source-item {{ 'disabled' if not source.enabled }}">
-      <span><strong>{{ source.name }}</strong><small>{{ source.kind }}</small><code>{{ source.path }}</code></span>
+      <span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span>
       <span class="source-actions">
-        <form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
-        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>
+        {% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}
       </span>
     </div>
   {% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}
@@ -36,11 +36,31 @@
   </form>
 </section>
 
+{% macro runtime_field(key, label, placeholder='') %}
+{% set field = settings.fields[key] %}
+<div class="runtime-setting {{ 'locked' if field.locked }}">
+  <div class="runtime-setting-label"><strong>{{ label }}</strong><small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>
+  {% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>
+  {% else %}<form method="post" action="/settings/runtime/{{ key }}">
+    {% if field.kind == 'bool' %}<select name="value"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>
+    {% else %}<input name="value" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}
+    <button class="button secondary" type="submit">{{ _('Save') }}</button>
+  </form>{% endif %}
+</div>
+{% endmacro %}
 <section class="settings-readonly-heading"><p class="eyebrow">{{ _('Album destinations and automation') }}</p><p>{{ _('Album destinations help') }}</p></section>
-<section class="panel settings-panel">
-  <div class="settings-row"><span>{{ _('Allow album moves') }}</span><strong class="{{ 'text-pass' if settings.enabled else 'text-rejected' }}">{{ _('Enabled') if settings.enabled else _('Disabled') }}</strong></div>
-  <div class="settings-row"><span>{{ _('Move albums automatically after analysis') }}</span><strong>{{ _('Enabled') if settings.auto_route else _('Manual') }}</strong></div>
+<section class="panel settings-panel runtime-settings">
+  {{ runtime_field('file_operations', _('Allow album moves')) }}
+  {{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}
+  {{ runtime_field('staging_root', _('Approved albums (Picard)'), '/data/music/validator/staging') }}
+  {{ runtime_field('quarantine_root', _('Albums to review'), '/data/music/validator/quarantine') }}
+  {{ runtime_field('rejected_root', _('Rejected albums'), '/data/music/validator/rejected') }}
+  {{ runtime_field('movable_roots', _('Authorized source folders'), '/data/downloads:/data/music/legacy') }}
+  {{ runtime_field('auth_enabled', _('Require login')) }}
+  {{ runtime_field('worker_concurrency', _('Simultaneous analyses')) }}
 </section>
+{% if request.state.user %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Change password') }}</h2></div></div><form class="source-form" method="post" action="/account/password"><label>{{ _('Current password') }}<input name="current_password" type="password" required></label><label>{{ _('New password') }}<input name="new_password" type="password" minlength="10" required></label><button class="button secondary" type="submit">{{ _('Change password') }}</button></form></section>{% endif %}
+{% if request.state.user and request.state.user.is_admin %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Local users') }}</h2></div></div><div class="source-list">{% for user in users %}<div class="source-item {{ 'disabled' if not user.active }}"><span><strong>{{ user.username }}</strong><small>{{ _('Administrator') if user.is_admin else _('User') }} · {{ _('Enabled') if user.active else _('Disabled') }}</small></span>{% if user.id != request.state.user.id %}<form method="post" action="/settings/users/{{ user.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if user.active else _('Enable') }}</button></form>{% endif %}</div>{% endfor %}</div><form class="source-form" method="post" action="/settings/users"><label>{{ _('Username') }}<input name="username" minlength="3" required></label><label>{{ _('Password') }}<input name="password" type="password" minlength="10" required></label><label><input name="admin" type="checkbox" value="true"> {{ _('Administrator') }}</label><button class="button success" type="submit">{{ _('Add user') }}</button></form></section>{% endif %}
 <section class="settings-grid">
 {% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
 <article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>

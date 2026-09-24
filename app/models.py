@@ -63,6 +63,21 @@ class AnalysisJob(Base):
     status: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
     created_at: Mapped[str] = mapped_column(String)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_batches.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    batch: Mapped[AnalysisBatch | None] = relationship(back_populates="jobs")
+
+
+class AnalysisBatch(Base):
+    __tablename__ = "analysis_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    source_path: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="ACTIVE", index=True)
+    created_at: Mapped[str] = mapped_column(String)
+    jobs: Mapped[list[AnalysisJob]] = relationship(back_populates="batch")
 
 
 class ReleaseOperation(Base):
@@ -89,3 +104,36 @@ class AnalysisSource(Base):
     path: Mapped[str] = mapped_column(String, unique=True, index=True)
     kind: Mapped[str] = mapped_column(String, default="FILESYSTEM")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ApplicationSetting(Base):
+    __tablename__ = "application_settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[str] = mapped_column(String)
+
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    track_id: Mapped[int] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), index=True)
+    release_id: Mapped[int] = mapped_column(ForeignKey("releases.id", ondelete="CASCADE"), index=True)
+    decision: Mapped[str] = mapped_column(String, index=True)
+    previous_review: Mapped[str] = mapped_column(String)
+    actor: Mapped[str] = mapped_column(String)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String)
+    undone: Mapped[bool] = mapped_column(Boolean, default=False)

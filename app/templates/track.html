@@ -7,6 +7,7 @@
   <div><p class="eyebrow">{{ _('Forensic review') }}</p><h1 class="track-title">{{ track.display_path }}</h1><p class="source-path">{{ track.path }}</p></div>
   <span class="badge large {{ track.status|lower }}">{{ track.status|human_status }}</span>
 </section>
+<section class="panel human-summary"><p class="eyebrow">{{ _('In practical terms') }}</p><h2>{{ track.forensic_verdict|verdict_summary }}</h2><p>{{ track.forensic_verdict|verdict_recommendation }}</p></section>
 <section class="stats">
   <article class="stat"><span>{{ _('Integrity') }} {{ help(_('Integrity help')) }}</span><strong class="{{ 'text-pass' if track.integrity_ok else 'text-rejected' }}">{{ "PASS" if track.integrity_ok else "FAILED" }}</strong></article>
   <article class="stat verdict-card {{ track.forensic_verdict|verdict_tone }}"><span>{{ _('Forensic verdict') }} {{ help(_('Forensic verdict help')) }}</span><strong>{{ track.forensic_verdict|human_verdict }}</strong></article>
@@ -26,11 +27,11 @@
     <h3>{{ _('Suspicious evidence') }}</h3><ul class="evidence suspicious">{% for item in spectral.get("evidence", []) %}<li>{{ item|evidence_text }}</li>{% else %}<li>{{ _('No suspicious evidence recorded.') }}</li>{% endfor %}</ul>
   </article>
 </section>
+<section class="panel spectrogram-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Visual analysis') }}</p><h2>{{ _('Spectrogram') }}</h2><p>{{ _('Spectrogram help') }}</p></div></div><img loading="lazy" src="/tracks/{{ track.id }}/spectrogram.png" alt="{{ _('Spectrogram') }}: {{ track.display_path }}"></section>
+<section class="panel comparison-panel"><h2>{{ _('Album comparison') }}</h2><p>{% if comparison.album_pattern %}{{ _('This result follows a recurring pattern across the album.') }}{% else %}{{ _('This track differs from most tracks in the album.') }}{% endif %}</p><dl><div><dt>{{ _('Album tracks compared') }}</dt><dd>{{ comparison.peer_count }}</dd></div><div><dt>{{ _('Median album cutoff') }}</dt><dd>{% if comparison.cutoff_median %}{{ '%.0f'|format(comparison.cutoff_median) }} Hz{% else %}—{% endif %}</dd></div><div><dt>{{ _('Median album confidence') }}</dt><dd>{% if comparison.confidence_median is not none %}{{ '%.1f'|format(comparison.confidence_median) }}%{% else %}—{% endif %}</dd></div></dl></section>
 <section class="panel detail-card evidence-section"><h2>{{ _('Natural lossless indicators') }}</h2><ul class="evidence natural">{% for item in spectral.get("natural_evidence", []) %}<li>{{ item|evidence_text }}</li>{% else %}<li>{{ _('No natural indicators recorded.') }}</li>{% endfor %}</ul></section>
 {% if track.status == "QUARANTINE" %}
-<section class="review-box"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ track.human_review|human_review }}</h2><p>{{ _('Automatic verdict unchanged') }}</p></div>
-<div class="review-actions"><form method="post" action="/tracks/{{ track.id }}/review/reject"><button class="button danger" type="submit">{{ _('Reject') }}</button></form>
-{% if track.human_review != "NONE" %}<form method="post" action="/tracks/{{ track.id }}/review/reset"><button class="button secondary" type="submit">{{ _('Reset') }}</button></form>{% endif %}
-<form method="post" action="/tracks/{{ track.id }}/review/approve"><button class="button success" type="submit">{{ _('Approve') }}</button></form></div></section>
+<section class="review-box"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ track.human_review|human_review }}</h2><p>{{ _('Automatic verdict unchanged') }}</p></div><form class="track-review-form" method="post"><input name="note" maxlength="500" placeholder="{{ _('Optional note') }}"><div class="review-actions"><button class="button danger" formaction="/tracks/{{ track.id }}/review/reject" type="submit">{{ _('Reject') }}</button>{% if track.human_review != "NONE" %}<button class="button secondary" formaction="/tracks/{{ track.id }}/review/reset" type="submit">{{ _('Reset') }}</button>{% endif %}<button class="button success" formaction="/tracks/{{ track.id }}/review/approve" type="submit">{{ _('Approve') }}</button></div></form></section>
 {% endif %}
+{% if decisions %}<section class="panel operation-history"><h2>{{ _('Review history') }}</h2>{% for decision in decisions %}<div class="operation-row"><strong>{{ decision.decision|human_review }}{% if decision.undone %} · {{ _('Undone') }}{% endif %}</strong><span>{{ decision.actor }} · {{ decision.created_at }}</span>{% if decision.note %}<p>{{ decision.note }}</p>{% endif %}{% if loop.first and not decision.undone %}<form method="post" action="/reviews/{{ decision.id }}/undo"><button class="clear-button" type="submit">{{ _('Undo') }}</button></form>{% endif %}</div>{% endfor %}</section>{% endif %}
 {% endblock %}
