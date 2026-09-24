@@ -1,0 +1,584 @@
+From 2a5303f7d4620f84f486ea77e1b6c9092be50d56 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 24 Sep 2026 20:00:35 +0800
+Subject: [PATCH] feat: redesign settings and embed image version
+
+---
+ .env.example                     |   3 +-
+ Dockerfile                       |   2 +-
+ README.md                        |   5 +-
+ ROADMAP.md                       |   9 +++
+ app/config.py                    |  27 --------
+ app/i18n.py                      |  19 ++++++
+ app/services/runtime_settings.py |  30 ++++++---
+ app/static/desktop.css           |  10 +++
+ app/templates/base.html          |   1 +
+ app/templates/settings.html      | 112 +++++++++++--------------------
+ app/version.py                   |   2 +-
+ app/workflow.py                  |  32 ++++++++-
+ compose.dev.yml                  |  12 ++--
+ compose.yml                      |   3 +-
+ scripts/publish-image.sh         |   2 +-
+ tests/test_auth.py               |   4 ++
+ tests/test_runtime_settings.py   |  14 +++-
+ tests/test_settings_page.py      |  46 +++++++++++++
+ 18 files changed, 206 insertions(+), 127 deletions(-)
+ create mode 100644 tests/test_settings_page.py
+
+diff --git a/.env.example b/.env.example
+index 80d786f..bb12ec1 100644
+--- a/.env.example
++++ b/.env.example
+@@ -2,8 +2,7 @@ PUID=1000
+ PGID=110000
+ LOSSLESS_VALIDATOR_PORT=8090
+ 
+-LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
+-LOSSLESS_VALIDATOR_VERSION=0.1.1
++SONIC_SENTRY_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.1.1
+ 
+ MEDIA_ROOT=/mnt/media
+ 
+diff --git a/Dockerfile b/Dockerfile
+index df00476..50ffd5b 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -56,7 +56,7 @@ RUN mkdir -p /app/data /app/reports /app/uploads \
+ 
+ ENV PYTHONUNBUFFERED=1 \
+     PYTHONDONTWRITEBYTECODE=1 \
+-    LOSSLESS_VALIDATOR_VERSION="${VERSION}" \
++    SONIC_SENTRY_VERSION="${VERSION}" \
+     LOSSLESS_VALIDATOR_DATA_DIR=/app/data \
+     LOSSLESS_REPORT_ROOT=/app/reports \
+     LOSSLESS_UPLOAD_ROOT=/app/uploads
+diff --git a/README.md b/README.md
+index 5794312..5af2b0c 100644
+--- a/README.md
++++ b/README.md
+@@ -82,7 +82,7 @@ The music library remains outside the container under `MEDIA_ROOT`.
+ 
+ ## Updating
+ 
+-Set the desired version in `.env`, then run:
++Set the desired image in `.env`, then run:
+ 
+ ```sh
+ docker compose pull
+@@ -92,8 +92,7 @@ docker compose up -d --remove-orphans
+ For SonicSentry 0.1.1:
+ 
+ ```env
+-LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
+-LOSSLESS_VALIDATOR_VERSION=0.1.1
++SONIC_SENTRY_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.1.1
+ ```
+ 
+ ## Local development
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 9e4d32e..4aeaa23 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -12,6 +12,14 @@ promises and may be reordered as the real music workflow evolves.
+ - Optional trusted-proxy and single-sign-on support for homelab deployments
+ - First-run setup that remains disabled when authentication is not requested
+ 
++## Configuration
++
++- Sectioned settings workspace with sidebar and one global save action (implemented on `dev`)
++- Environment-owned settings shown as locked and database-owned settings editable (implemented on `dev`)
++- Unsaved-change warning and optional advanced settings view (implemented on `dev`)
++- Additional policy flags for routing, review thresholds, retention, and integrations
++- Import and export of configuration for backup or migration
++
+ Authentication must remain optional so SonicSentry can still run safely on a
+ trusted private network without adding unnecessary setup.
+ 
+@@ -43,3 +51,4 @@ trusted private network without adding unnecessary setup.
+ - Health and metrics endpoints suitable for monitoring
+ - Multi-architecture container images
+ - Configurable retention for reports, uploads, and completed jobs
++- Display the application version embedded in the container image rather than a runtime version variable (implemented on `dev`)
+diff --git a/app/config.py b/app/config.py
+index f1b55d7..d0d81f6 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -33,30 +33,3 @@ REPORT_ROOT.mkdir(parents=True, exist_ok=True)
+ 
+ for root in SOURCE_ROOTS:
+     root.mkdir(parents=True, exist_ok=True)
+-
+-
+-def env_bool(name: str, default: bool = False) -> bool:
+-    value = os.getenv(name)
+-    if value is None:
+-        return default
+-    return value.strip().lower() in {"1", "true", "yes", "on"}
+-
+-
+-def optional_path(name: str) -> Path | None:
+-    value = os.getenv(name, "").strip()
+-    return Path(value).resolve() if value else None
+-
+-
+-FILE_OPERATIONS_ENABLED = env_bool("LOSSLESS_FILE_OPERATIONS", False)
+-AUTO_ROUTE_RELEASES = env_bool("LOSSLESS_AUTO_ROUTE", False)
+-
+-movable_roots_value = os.getenv("LOSSLESS_MOVABLE_ROOTS", "")
+-MOVABLE_ROOTS = tuple(
+-    Path(value).resolve()
+-    for value in movable_roots_value.split(os.pathsep)
+-    if value.strip()
+-)
+-
+-STAGING_ROOT = optional_path("LOSSLESS_STAGING_ROOT")
+-QUARANTINE_ROOT = optional_path("LOSSLESS_QUARANTINE_ROOT")
+-REJECTED_ROOT = optional_path("LOSSLESS_REJECTED_ROOT")
+diff --git a/app/i18n.py b/app/i18n.py
+index ac088dc..49e078e 100644
+--- a/app/i18n.py
++++ b/app/i18n.py
+@@ -256,6 +256,25 @@ ITALIAN = {
+     "Undo move": "Annulla spostamento",
+     "Undo move confirm": "Riportare l'album nella posizione precedente? L'operazione è possibile solo se quella posizione è ancora libera.",
+     "Simultaneous analyses": "Analisi contemporanee",
++    "Settings introduction": "Configura il comportamento di SonicSentry. Le opzioni bloccate provengono da Docker e non possono essere cambiate qui.",
++    "Settings sections": "Sezioni delle impostazioni",
++    "General": "Generali",
++    "Interface": "Interfaccia",
++    "Workflow": "Flusso di lavoro",
++    "Users": "Utenti",
++    "Storage status": "Stato archiviazione",
++    "Advanced": "Avanzate",
++    "Show advanced": "Mostra avanzate",
++    "Hide advanced": "Nascondi avanzate",
++    "Save changes": "Salva modifiche",
++    "Settings saved": "Impostazioni salvate.",
++    "Authentication": "Autenticazione",
++    "Authentication help": "Richiede un account locale per accedere all'interfaccia. Quando viene attivata per la prima volta, SonicSentry chiede di creare l'amministratore.",
++    "Authentication enabled help": "L'autenticazione è attiva. Gli amministratori possono creare e disattivare gli utenti nella sezione Utenti.",
++    "Local users help": "Gestisci gli account che possono accedere a SonicSentry. Almeno un amministratore deve restare attivo.",
++    "Advanced settings": "Impostazioni avanzate",
++    "Advanced settings help": "Opzioni operative che normalmente non richiedono modifiche frequenti.",
++    "Worker concurrency help": "Numero massimo di album analizzati contemporaneamente. Valori maggiori richiedono più CPU e memoria.",
+ }
+ 
+ 
+diff --git a/app/services/runtime_settings.py b/app/services/runtime_settings.py
+index 9feec69..16925fe 100644
+--- a/app/services/runtime_settings.py
++++ b/app/services/runtime_settings.py
+@@ -99,18 +99,26 @@ def normalize_value(spec: SettingSpec, value: str) -> str:
+ 
+ 
+ def set_value(key: str, value: str) -> None:
+-    if key not in SPECS:
+-        raise SettingError("Unknown setting")
+-    if is_locked(key):
+-        raise SettingError(f"{SPECS[key].env} is fixed by the environment")
+-    normalized = normalize_value(SPECS[key], value)
++    set_values({key: value})
++
++
++def set_values(values: dict[str, str]) -> None:
++    """Validate and persist a settings form as one transaction."""
++    normalized_values: dict[str, str] = {}
++    for key, value in values.items():
++        if key not in SPECS:
++            raise SettingError("Unknown setting")
++        if is_locked(key):
++            raise SettingError(f"{SPECS[key].env} is fixed by the environment")
++        normalized_values[key] = normalize_value(SPECS[key], value)
++
+     with SessionLocal() as session:
+-        setting = session.get(ApplicationSetting, key)
+-        if setting is None:
+-            setting = ApplicationSetting(key=key, value=normalized)
+-            session.add(setting)
+-        else:
+-            setting.value = normalized
++        for key, normalized in normalized_values.items():
++            setting = session.get(ApplicationSetting, key)
++            if setting is None:
++                session.add(ApplicationSetting(key=key, value=normalized))
++            else:
++                setting.value = normalized
+         session.commit()
+ 
+ 
+diff --git a/app/static/desktop.css b/app/static/desktop.css
+index cf92c02..af33027 100644
+--- a/app/static/desktop.css
++++ b/app/static/desktop.css
+@@ -638,3 +638,13 @@ input[type="file"] {
+ .auth-shell{max-width:520px;margin:48px auto}.auth-shell form{display:grid;gap:16px}.auth-shell label{display:grid;gap:6px}.nav-logout{border:0;background:transparent;color:var(--link);cursor:pointer;font:inherit}.main-nav form{display:inline-flex}
+ .batch-toolbar{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border)}.batch-release-list{display:grid}.batch-release-list label,.batch-row{display:flex;gap:12px;align-items:center;padding:10px;border-bottom:1px solid var(--border)}.batch-release-list span,.batch-row>span{display:flex;flex-direction:column}.batch-release-list small,.batch-row small{color:var(--muted)}.batch-row{justify-content:space-between}
+ .review-list{display:grid;margin-bottom:16px}.review-row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:10px;border-bottom:1px solid var(--border)}.review-row span{display:flex;flex-direction:column}.review-row small{color:var(--muted)}.review-queue>label,.track-review-form{display:grid;gap:6px}.spectrogram-panel img{display:block;width:100%;height:auto;border:1px solid var(--border);background:#050607}.comparison-panel dl{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.comparison-panel dl div{display:flex;flex-direction:column;padding:10px;background:var(--surface)}.human-summary{border-left:4px solid var(--accent)}
++
++/* settings-workbench-v1 */
++.settings-heading{align-items:flex-end}.settings-heading>div>p:last-child{margin:3px 0 0;color:var(--muted)}
++.settings-heading-actions{display:flex;gap:7px;position:sticky;top:8px;z-index:5}.settings-saved{margin-bottom:10px;padding:9px 12px;border:1px solid var(--pass);background:rgba(66,211,146,.08);color:var(--pass)}
++.settings-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:10px;align-items:start}.settings-sidebar{position:sticky;top:62px;display:grid;padding:6px}.settings-sidebar a{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text)}.settings-sidebar a:hover{background:var(--surface-raised);color:var(--link)}
++.settings-content,.settings-content>form{display:grid;gap:10px;min-width:0}.settings-section{scroll-margin-top:70px}.settings-section .section-heading{margin-bottom:5px}.settings-section select,.settings-section input{min-width:0;padding:7px 8px;border:1px solid #111315;background:#202326;color:var(--text)}
++.runtime-setting-label span,.settings-inline-note{color:var(--muted);font-size:12px}.settings-inline-note{margin:10px 0 0;padding:8px;border-left:3px solid var(--accent);background:var(--surface-inset)}
++.advanced-setting{display:none!important}.show-advanced-settings .advanced-setting{display:grid!important}.show-advanced-settings a.advanced-setting{display:block!important}
++.user-form{grid-template-columns:minmax(140px,.6fr) minmax(220px,1fr) 150px auto}.checkbox-label{display:flex!important;align-items:center;align-self:center;gap:7px!important}.checkbox-label input{min-width:auto}.password-form{display:grid;grid-template-columns:1fr 1fr auto;gap:7px;align-items:end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}.password-form h3{grid-column:1/-1;margin:0}.password-form label{display:grid;gap:4px;color:var(--muted);font-size:11px}
++@media(max-width:850px){.settings-layout{grid-template-columns:1fr}.settings-sidebar{position:static;display:flex;overflow-x:auto}.settings-sidebar a{white-space:nowrap;border-bottom:0;border-right:1px solid var(--border)}.settings-heading{align-items:stretch;flex-direction:column}.settings-heading-actions{position:static}.user-form,.password-form{grid-template-columns:1fr}}
+diff --git a/app/templates/base.html b/app/templates/base.html
+index 6498b96..7532fd9 100644
+--- a/app/templates/base.html
++++ b/app/templates/base.html
+@@ -22,5 +22,6 @@
+     </nav>
+ </header>
+ <main class="container">{% block content %}{% endblock %}</main>
++{% block scripts %}{% endblock %}
+ </body>
+ </html>
+diff --git a/app/templates/settings.html b/app/templates/settings.html
+index b32e3d8..5679eaa 100644
+--- a/app/templates/settings.html
++++ b/app/templates/settings.html
+@@ -1,78 +1,48 @@
+ {% extends "base.html" %}
+ {% block title %}{{ _('Settings') }} · {{ app_name }}{% endblock %}
+ {% block content %}
+-<section class="page-heading"><div><p class="eyebrow">{{ _('Configuration') }}</p><h1>{{ _('Settings') }}</h1></div></section>
+-
+-<section class="panel settings-panel editable-settings">
+-  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Interface language') }}</h2><p>{{ _('Language help') }}</p></div></div>
+-  <form class="language-form" method="post" action="/settings/language">
+-    <select name="language">
+-      <option value="auto" {{ 'selected' if language_preference == 'auto' }}>{{ _('Automatic (browser)') }} — {{ effective_language|upper }}</option>
+-      <option value="it" {{ 'selected' if language_preference == 'it' }}>Italiano</option>
+-      <option value="en" {{ 'selected' if language_preference == 'en' }}>English</option>
+-    </select>
+-    <button class="button success" type="submit">{{ _('Save language') }}</button>
+-  </form>
++<section class="page-heading settings-heading">
++  <div><p class="eyebrow">{{ _('Configuration') }}</p><h1>{{ _('Settings') }}</h1><p>{{ _('Settings introduction') }}</p></div>
++  <div class="settings-heading-actions"><button class="button secondary" id="advanced-toggle" type="button" aria-pressed="false">{{ _('Show advanced') }}</button><button class="button success" type="submit" form="settings-form">{{ _('Save changes') }}</button></div>
+ </section>
+-
+-<section class="panel settings-panel source-settings">
+-  <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Folders to analyze') }}</h2><p>{{ _('Folders to analyze help') }}</p></div></div>
+-  <div class="source-list">
+-  {% for source in sources %}
+-    <div class="source-item {{ 'disabled' if not source.enabled }}">
+-      <span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span>
+-      <span class="source-actions">
+-        {% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
+-        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}
+-      </span>
+-    </div>
+-  {% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}
++{% if request.query_params.get('saved') %}<div class="settings-saved" role="status">{{ _('Settings saved') }}</div>{% endif %}
++<div class="settings-layout">
++  <aside class="settings-sidebar panel" aria-label="{{ _('Settings sections') }}">
++    <a href="#general">{{ _('General') }}</a><a href="#workflow">{{ _('Workflow') }}</a><a href="#sources">{{ _('Analysis sources') }}</a><a href="#security">{{ _('Security') }}</a>{% if auth_enabled %}<a href="#users">{{ _('Users') }}</a>{% endif %}<a href="#storage">{{ _('Storage status') }}</a><a class="advanced-setting" href="#advanced">{{ _('Advanced') }}</a>
++  </aside>
++  <div class="settings-content">
++    <form id="settings-form" method="post" action="/settings/save" data-settings-form>
++      <section class="panel settings-panel settings-section" id="general">
++        <div class="section-heading"><div><p class="eyebrow">{{ _('General') }}</p><h2>{{ _('Interface') }}</h2><p>{{ _('Language help') }}</p></div></div>
++        <div class="runtime-setting"><div class="runtime-setting-label"><strong>{{ _('Interface language') }}</strong></div><select name="language"><option value="auto" {{ 'selected' if language_preference == 'auto' }}>{{ _('Automatic (browser)') }} — {{ effective_language|upper }}</option><option value="it" {{ 'selected' if language_preference == 'it' }}>Italiano</option><option value="en" {{ 'selected' if language_preference == 'en' }}>English</option></select></div>
++      </section>
++      {% macro runtime_field(key, label, help='', placeholder='', advanced=false) %}{% set field = settings.fields[key] %}
++      <div class="runtime-setting {{ 'locked' if field.locked }} {{ 'advanced-setting' if advanced }}"><div class="runtime-setting-label"><strong>{{ label }}</strong>{% if help %}<span>{{ help }}</span>{% endif %}<small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>{% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>{% elif field.kind == 'bool' %}<select name="setting_{{ key }}"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>{% else %}<input name="setting_{{ key }}" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}</div>
++      {% endmacro %}
++      <section class="panel settings-panel settings-section" id="workflow">
++        <div class="section-heading"><div><p class="eyebrow">{{ _('Workflow') }}</p><h2>{{ _('Album destinations and automation') }}</h2><p>{{ _('Album destinations help') }}</p></div></div>
++        {{ runtime_field('file_operations', _('Allow album moves')) }}{{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}{{ runtime_field('staging_root', _('Approved albums (Picard)'), '', '/data/music/validator/staging') }}{{ runtime_field('quarantine_root', _('Albums to review'), '', '/data/music/validator/quarantine') }}{{ runtime_field('rejected_root', _('Rejected albums'), '', '/data/music/validator/rejected') }}
++      </section>
++      <section class="panel settings-panel settings-section" id="security">
++        <div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Authentication') }}</h2><p>{{ _('Authentication help') }}</p></div></div>{{ runtime_field('auth_enabled', _('Require login')) }}{% if auth_enabled %}<p class="settings-inline-note">{{ _('Authentication enabled help') }}</p>{% endif %}
++      </section>
++      <section class="panel settings-panel settings-section advanced-setting" id="advanced">
++        <div class="section-heading"><div><p class="eyebrow">{{ _('Advanced') }}</p><h2>{{ _('Advanced settings') }}</h2><p>{{ _('Advanced settings help') }}</p></div></div>{{ runtime_field('movable_roots', _('Authorized source folders'), _('Authorized source folders help'), '/data/downloads:/data/music/legacy', true) }}{{ runtime_field('worker_concurrency', _('Simultaneous analyses'), _('Worker concurrency help'), '', true) }}
++      </section>
++    </form>
++    <section class="panel settings-panel settings-section source-settings" id="sources">
++      <div class="section-heading"><div><p class="eyebrow">{{ _('Analysis sources') }}</p><h2>{{ _('Folders to analyze') }}</h2><p>{{ _('Folders to analyze help') }}</p></div></div><div class="source-list">{% for source in sources %}<div class="source-item {{ 'disabled' if not source.enabled }}"><span><strong>{{ source.name }}{% if source.locked %} 🔒{% endif %}</strong><small>{{ source.kind }}{% if source.locked %} · LOSSLESS_SOURCE_ROOTS{% endif %}</small><code>{{ source.path }}</code></span><span class="source-actions">{% if not source.locked %}<form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form><form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit="return confirm({{ _('Remove source confirm')|tojson }})"><button class="button danger" type="submit">{{ _('Remove') }}</button></form>{% endif %}</span></div>{% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}</div>
++      <form class="source-form" method="post" action="/settings/sources"><label>{{ _('Name') }}<input name="name" required placeholder="qBittorrent"></label><label>{{ _('Type') }}<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">{{ _('Other') }}</option></select></label><label>{{ _('Container path') }}<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label><button class="button success" type="submit">{{ _('Add source') }}</button></form>
++    </section>
++    {% if auth_enabled %}<section class="panel settings-panel settings-section" id="users">
++      <div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Local users') }}</h2><p>{{ _('Local users help') }}</p></div></div>
++      {% if request.state.user and request.state.user.is_admin %}<div class="source-list">{% for user in users %}<div class="source-item {{ 'disabled' if not user.active }}"><span><strong>{{ user.username }}</strong><small>{{ _('Administrator') if user.is_admin else _('User') }} · {{ _('Enabled') if user.active else _('Disabled') }}</small></span>{% if user.id != request.state.user.id %}<form method="post" action="/settings/users/{{ user.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if user.active else _('Enable') }}</button></form>{% endif %}</div>{% endfor %}</div><form class="source-form user-form" method="post" action="/settings/users"><label>{{ _('Username') }}<input name="username" minlength="3" required></label><label>{{ _('Password') }}<input name="password" type="password" minlength="10" required></label><label class="checkbox-label"><input name="admin" type="checkbox" value="true"> {{ _('Administrator') }}</label><button class="button success" type="submit">{{ _('Add user') }}</button></form>{% endif %}
++      {% if request.state.user %}<form class="password-form" method="post" action="/account/password"><h3>{{ _('Change password') }}</h3><label>{{ _('Current password') }}<input name="current_password" type="password" required></label><label>{{ _('New password') }}<input name="new_password" type="password" minlength="10" required></label><button class="button secondary" type="submit">{{ _('Change password') }}</button></form>{% endif %}
++    </section>{% endif %}
++    <section class="settings-section" id="storage"><div class="settings-grid">{% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}<article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>{% endfor %}</div></section>
+   </div>
+-  <form class="source-form" method="post" action="/settings/sources">
+-    <label>{{ _('Name') }}<input name="name" required placeholder="qBittorrent"></label>
+-    <label>{{ _('Type') }}<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">{{ _('Other') }}</option></select></label>
+-    <label class="source-path-input">{{ _('Container path') }}<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label>
+-    <button class="button success" type="submit">{{ _('Add source') }}</button>
+-  </form>
+-</section>
+-
+-{% macro runtime_field(key, label, placeholder='') %}
+-{% set field = settings.fields[key] %}
+-<div class="runtime-setting {{ 'locked' if field.locked }}">
+-  <div class="runtime-setting-label"><strong>{{ label }}</strong><small>{{ field.env }} · {{ _(field.source.title()) }}</small></div>
+-  {% if field.locked %}<div class="locked-value"><span aria-hidden="true">🔒</span><code>{{ field.value or '—' }}</code></div>
+-  {% else %}<form method="post" action="/settings/runtime/{{ key }}">
+-    {% if field.kind == 'bool' %}<select name="value"><option value="true" {{ 'selected' if field.value == 'true' }}>{{ _('Enabled') }}</option><option value="false" {{ 'selected' if field.value != 'true' }}>{{ _('Disabled') }}</option></select>
+-    {% else %}<input name="value" value="{{ field.value }}" placeholder="{{ placeholder }}">{% endif %}
+-    <button class="button secondary" type="submit">{{ _('Save') }}</button>
+-  </form>{% endif %}
+ </div>
+-{% endmacro %}
+-<section class="settings-readonly-heading"><p class="eyebrow">{{ _('Album destinations and automation') }}</p><p>{{ _('Album destinations help') }}</p></section>
+-<section class="panel settings-panel runtime-settings">
+-  {{ runtime_field('file_operations', _('Allow album moves')) }}
+-  {{ runtime_field('auto_route', _('Move albums automatically after analysis')) }}
+-  {{ runtime_field('staging_root', _('Approved albums (Picard)'), '/data/music/validator/staging') }}
+-  {{ runtime_field('quarantine_root', _('Albums to review'), '/data/music/validator/quarantine') }}
+-  {{ runtime_field('rejected_root', _('Rejected albums'), '/data/music/validator/rejected') }}
+-  {{ runtime_field('movable_roots', _('Authorized source folders'), '/data/downloads:/data/music/legacy') }}
+-  {{ runtime_field('auth_enabled', _('Require login')) }}
+-  {{ runtime_field('worker_concurrency', _('Simultaneous analyses')) }}
+-</section>
+-{% if request.state.user %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Change password') }}</h2></div></div><form class="source-form" method="post" action="/account/password"><label>{{ _('Current password') }}<input name="current_password" type="password" required></label><label>{{ _('New password') }}<input name="new_password" type="password" minlength="10" required></label><button class="button secondary" type="submit">{{ _('Change password') }}</button></form></section>{% endif %}
+-{% if request.state.user and request.state.user.is_admin %}<section class="panel settings-panel"><div class="section-heading"><div><p class="eyebrow">{{ _('Security') }}</p><h2>{{ _('Local users') }}</h2></div></div><div class="source-list">{% for user in users %}<div class="source-item {{ 'disabled' if not user.active }}"><span><strong>{{ user.username }}</strong><small>{{ _('Administrator') if user.is_admin else _('User') }} · {{ _('Enabled') if user.active else _('Disabled') }}</small></span>{% if user.id != request.state.user.id %}<form method="post" action="/settings/users/{{ user.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if user.active else _('Enable') }}</button></form>{% endif %}</div>{% endfor %}</div><form class="source-form" method="post" action="/settings/users"><label>{{ _('Username') }}<input name="username" minlength="3" required></label><label>{{ _('Password') }}<input name="password" type="password" minlength="10" required></label><label><input name="admin" type="checkbox" value="true"> {{ _('Administrator') }}</label><button class="button success" type="submit">{{ _('Add user') }}</button></form></section>{% endif %}
+-<section class="settings-grid">
+-{% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
+-<article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>
+-{% endfor %}
+-</section>
+-<section class="panel settings-panel"><h2>{{ _('Authorized source folders') }}</h2><p class="settings-explanation">{{ _('Authorized source folders help') }}</p>{% for item in settings.movable_roots %}<div class="settings-row"><code>{{ item.path }}</code><span><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></span></div>{% else %}<p class="settings-warning">{{ _('No authorized source folders') }}</p>{% endfor %}</section>
+-<details class="panel settings-help settings-advanced"><summary><strong>{{ _('Advanced technical settings') }}</strong><span>{{ _('Advanced technical settings help') }}</span></summary><dl>
+-<div><dt>LOSSLESS_FILE_OPERATIONS</dt><dd>{{ _('Allow album moves') }}</dd></div>
+-<div><dt>LOSSLESS_AUTO_ROUTE</dt><dd>{{ _('Move albums automatically after analysis') }}</dd></div>
+-<div><dt>LOSSLESS_MOVABLE_ROOTS</dt><dd>{{ _('Authorized source folders') }}</dd></div>
+-<div><dt>LOSSLESS_STAGING_ROOT</dt><dd>{{ _('Approved albums (Picard)') }}</dd></div>
+-<div><dt>LOSSLESS_QUARANTINE_ROOT</dt><dd>{{ _('Albums to review') }}</dd></div>
+-<div><dt>LOSSLESS_REJECTED_ROOT</dt><dd>{{ _('Rejected albums') }}</dd></div>
+-</dl></details>
+ {% endblock %}
++{% block scripts %}<script>
++(() => { const form=document.querySelector('[data-settings-form]'), toggle=document.getElementById('advanced-toggle'); let dirty=false; const show=value=>{document.body.classList.toggle('show-advanced-settings',value);toggle.setAttribute('aria-pressed',String(value));toggle.textContent=value?{{ _('Hide advanced')|tojson }}:{{ _('Show advanced')|tojson }};}; show(localStorage.getItem('sonic-sentry-advanced')==='true'); toggle.addEventListener('click',()=>{const value=toggle.getAttribute('aria-pressed')!=='true';localStorage.setItem('sonic-sentry-advanced',String(value));show(value);}); form.addEventListener('input',()=>dirty=true);form.addEventListener('change',()=>dirty=true);form.addEventListener('submit',()=>dirty=false);window.addEventListener('beforeunload',event=>{if(!dirty)return;event.preventDefault();event.returnValue='';}); })();
++</script>{% endblock %}
+diff --git a/app/version.py b/app/version.py
+index 0a9f5a5..b37bc68 100644
+--- a/app/version.py
++++ b/app/version.py
+@@ -2,4 +2,4 @@ import os
+ 
+ 
+ APP_NAME = "SonicSentry"
+-APP_VERSION = os.getenv("LOSSLESS_VALIDATOR_VERSION", "0.1.1")
++APP_VERSION = os.getenv("SONIC_SENTRY_VERSION", "development")
+diff --git a/app/workflow.py b/app/workflow.py
+index fbe2e96..a1465a8 100644
+--- a/app/workflow.py
++++ b/app/workflow.py
+@@ -16,7 +16,7 @@ from app.services.file_workflow import (
+     undo_move,
+ )
+ from app.services.sources import SourceConfigurationError, add_source
+-from app.services.runtime_settings import SettingError, set_value
++from app.services.runtime_settings import SPECS, SettingError, bool_value, set_value, set_values
+ from app.auth import require_admin
+ 
+ 
+@@ -42,10 +42,40 @@ def settings_page(request: Request):
+             "language_preference": request.cookies.get("lv_language", "auto"),
+             "effective_language": resolve_language(request),
+             "users": users,
++            "auth_enabled": bool_value("auth_enabled"),
+         },
+     )
+ 
+ 
++@router.post("/settings/save")
++async def save_settings(request: Request):
++    require_admin(request)
++    form = await request.form()
++    language = str(form.get("language", "auto"))
++    if language not in {"auto", "it", "en"}:
++        raise HTTPException(status_code=400, detail="Invalid language")
++
++    updates = {
++        key: str(form[f"setting_{key}"])
++        for key in SPECS
++        if f"setting_{key}" in form
++    }
++    try:
++        set_values(updates)
++    except SettingError as exc:
++        raise HTTPException(status_code=409, detail=str(exc)) from exc
++
++    response = RedirectResponse("/settings?saved=1", status_code=303)
++    if language == "auto":
++        response.delete_cookie("lv_language")
++    else:
++        response.set_cookie(
++            "lv_language", language, max_age=60 * 60 * 24 * 365,
++            httponly=True, samesite="lax",
++        )
++    return response
++
++
+ @router.post("/settings/language")
+ def set_language(language: str = Form(...)):
+     if language not in {"auto", "it", "en"}:
+diff --git a/compose.dev.yml b/compose.dev.yml
+index b8ea7cd..71d4ce6 100644
+--- a/compose.dev.yml
++++ b/compose.dev.yml
+@@ -3,16 +3,16 @@ services:
+     build:
+       context: .
+       args:
+-        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.2.0-dev}"
+-        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
+-        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
++        VERSION: "0.2.0-dev"
++        VCS_REF: "${SONIC_SENTRY_VCS_REF:-dev}"
++        BUILD_DATE: "${SONIC_SENTRY_BUILD_DATE:-local}"
+     image: spacechips/sonic-sentry:dev
+ 
+   worker:
+     build:
+       context: .
+       args:
+-        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.2.0-dev}"
+-        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
+-        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
++        VERSION: "0.2.0-dev"
++        VCS_REF: "${SONIC_SENTRY_VCS_REF:-dev}"
++        BUILD_DATE: "${SONIC_SENTRY_BUILD_DATE:-local}"
+     image: spacechips/sonic-sentry:dev
+diff --git a/compose.yml b/compose.yml
+index 9158848..c2f9af5 100644
+--- a/compose.yml
++++ b/compose.yml
+@@ -1,14 +1,13 @@
+ name: sonic-sentry
+ 
+ x-app: &app
+-  image: "${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}:${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
++  image: "${SONIC_SENTRY_IMAGE:-ghcr.io/spacechips31/sonic-sentry:0.1.1}"
+   user: "${PUID:-1000}:${PGID:-1000}"
+   init: true
+   restart: unless-stopped
+   security_opt:
+     - no-new-privileges:true
+   environment: &app-environment
+-    - "LOSSLESS_VALIDATOR_VERSION=${LOSSLESS_VALIDATOR_VERSION:-0.1.1}"
+     - LOSSLESS_VALIDATOR_DATA_DIR=/app/data
+     - LOSSLESS_REPORT_ROOT=/app/reports
+     - LOSSLESS_UPLOAD_ROOT=/app/uploads
+diff --git a/scripts/publish-image.sh b/scripts/publish-image.sh
+index 7d3cc07..e61d9eb 100755
+--- a/scripts/publish-image.sh
++++ b/scripts/publish-image.sh
+@@ -16,7 +16,7 @@ case "$version" in
+         ;;
+ esac
+ 
+-registry_image=${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}
++registry_image=${SONIC_SENTRY_REGISTRY_IMAGE:-ghcr.io/spacechips31/sonic-sentry}
+ minor=${version%.*}
+ revision=$(git rev-parse HEAD 2>/dev/null || printf unknown)
+ build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+diff --git a/tests/test_auth.py b/tests/test_auth.py
+index 8cb8b9b..e042704 100644
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -47,6 +47,10 @@ def test_enabled_auth_guides_first_user_through_setup(monkeypatch):
+         assert response.status_code == 303
+         assert response.headers["location"] == "/"
+         assert client.get("/").status_code == 200
++        settings = client.get("/settings")
++        assert settings.status_code == 200
++        assert 'id="users"' in settings.text
++        assert "admin" in settings.text
+         assert client.post("/logout").headers["location"] == "/login"
+ 
+     with SessionLocal() as session:
+diff --git a/tests/test_runtime_settings.py b/tests/test_runtime_settings.py
+index aa15baf..48672bb 100644
+--- a/tests/test_runtime_settings.py
++++ b/tests/test_runtime_settings.py
+@@ -4,7 +4,7 @@ import pytest
+ 
+ from app.database import Base, SessionLocal, engine
+ from app.models import ApplicationSetting
+-from app.services.runtime_settings import SettingError, describe, set_value
++from app.services.runtime_settings import SettingError, describe, set_value, set_values
+ 
+ 
+ @pytest.fixture(autouse=True)
+@@ -45,3 +45,15 @@ def test_worker_concurrency_is_bounded():
+     assert describe("worker_concurrency")["value"] == "4"
+     with pytest.raises(SettingError):
+         set_value("worker_concurrency", "9")
++
++
++def test_bulk_settings_are_saved_together():
++    set_values({"file_operations": "true", "worker_concurrency": "3"})
++    assert describe("file_operations")["value"] == "true"
++    assert describe("worker_concurrency")["value"] == "3"
++
++
++def test_bulk_settings_do_not_partially_save_on_validation_error():
++    with pytest.raises(SettingError):
++        set_values({"file_operations": "true", "worker_concurrency": "99"})
++    assert describe("file_operations")["source"] == "default"
+diff --git a/tests/test_settings_page.py b/tests/test_settings_page.py
+new file mode 100644
+index 0000000..c63d024
+--- /dev/null
++++ b/tests/test_settings_page.py
+@@ -0,0 +1,46 @@
++from fastapi.testclient import TestClient
++import pytest
++
++from app.database import SessionLocal
++from app.main import app
++from app.models import ApplicationSetting
++from app.services.runtime_settings import describe
++
++
++@pytest.fixture(autouse=True)
++def clean_application_settings():
++    with SessionLocal() as session:
++        session.query(ApplicationSetting).delete()
++        session.commit()
++    yield
++    with SessionLocal() as session:
++        session.query(ApplicationSetting).delete()
++        session.commit()
++
++
++def test_settings_page_has_single_save_and_navigation(monkeypatch):
++    monkeypatch.delenv("SONIC_SENTRY_AUTH_ENABLED", raising=False)
++    with TestClient(app) as client:
++        response = client.get("/settings")
++    assert response.status_code == 200
++    assert 'id="settings-form"' in response.text
++    assert 'id="advanced-toggle"' in response.text
++    assert 'href="#workflow"' in response.text
++
++
++def test_general_settings_save_updates_multiple_values(monkeypatch):
++    for name in ("LOSSLESS_FILE_OPERATIONS", "SONIC_SENTRY_WORKER_CONCURRENCY"):
++        monkeypatch.delenv(name, raising=False)
++    with TestClient(app, follow_redirects=False) as client:
++        response = client.post(
++            "/settings/save",
++            data={
++                "language": "it",
++                "setting_file_operations": "true",
++                "setting_worker_concurrency": "2",
++            },
++        )
++    assert response.status_code == 303
++    assert response.headers["location"] == "/settings?saved=1"
++    assert describe("file_operations")["value"] == "true"
++    assert describe("worker_concurrency")["value"] == "2"
+-- 
+2.51.1
+
