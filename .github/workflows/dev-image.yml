@@ -24,7 +24,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:dev
+          tags: ghcr.io/spacechips31/sonic-sentry:dev
           build-args: |
             VERSION=0.2.0-dev
             VCS_REF=${{ github.sha }}
