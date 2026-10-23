@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,12 +26,20 @@ def run_flac_test(path: Path):
     }
 
 
-def run_forensics(path: Path):
+def run_forensics(path: Path, spectrogram_dir: Path | None = None):
+    if spectrogram_dir is None:
+        with tempfile.TemporaryDirectory(prefix="sonic-sentry-") as folder:
+            forensic = run_forensics(path, Path(folder))
+            if forensic.get("ok"):
+                forensic["result"].pop("spectrogram_path", None)
+            return forensic
     proc = subprocess.run(
         [
             sys.executable,
             "/opt/audio-forensic/audio_forensic.py",
             "--json",
+            "--spectrogram-dir",
+            str(spectrogram_dir),
             str(path),
         ],
         stdout=subprocess.PIPE,
@@ -158,7 +167,7 @@ def main():
             forensic = None
             release_status = "REJECTED"
         else:
-            forensic = run_forensics(path)
+            forensic = run_forensics(path, args.report.resolve().parent / f"{args.report.stem}-spectrograms" if args.report else None)
             status = classify(forensic)
 
             if (

@@ -49,6 +49,10 @@ with tempfile.TemporaryDirectory() as temporary:
         assert release.tracks[0].integrity_ok
         assert session.scalar(select(FileTransfer)).state == "COMPLETE"
         assert Path(release.source_path, "track.flac").is_file()
+        assert {p.name for p in Path(release.source_path).iterdir()} == {"track.flac", "track.wav"}
+        import json
+        graph = Path(json.loads(release.tracks[0].forensic_json)["result"]["spectrogram_path"])
+        assert graph.is_relative_to(root / "reports") and graph.is_file()
         assert not album.exists()
         print(f"Container smoke test passed: job #{job_id}, release {release.status}")
     engine.dispose()

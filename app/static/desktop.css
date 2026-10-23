@@ -673,3 +673,5 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .activity-panel { margin-bottom: 18px; }
 .activity-panel > h2 { padding: 16px; margin: 0; border-bottom: 1px solid var(--border-light); }
 button:disabled { opacity: .45; cursor: not-allowed; }
+
+.spectrogram { display: block; max-width: 100%; height: auto; margin: 12px auto; }

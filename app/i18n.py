@@ -4,6 +4,10 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Spectrogram": "Spettrogramma",
+    "Spectrogram of this track": "Spettrogramma di questa traccia",
+    "No managed spectrogram is available. Run a new analysis to generate it.": "Nessuno spettrogramma disponibile nell’area report. Avvia una nuova analisi per generarlo.",
+    "Waiting for the next ingestion batch": "In attesa del prossimo gruppo di acquisizione",
     "ANALYZING": "In analisi",
     "ROUTING": "Trasferimento in corso",
     "Waiting for stable files": "In attesa che i file siano stabili",

@@ -115,7 +115,9 @@ and file-operation history, replaces track results and resets human reviews.
 Enable **Watch folder** on each desired source in Settings. Monitoring starts
 only after you opt in for that source. The worker checks sources between jobs;
 the scan interval defaults to 60 seconds and the stability wait to 300 seconds.
-Both values are editable without a restart. An album must remain unchanged
+Both values are editable without a restart. Large watched libraries are processed
+in groups of up to 25 new jobs per scan; subsequent scans continue with the
+remaining albums. An album must remain unchanged
 across observations for the full wait, with no known partial-download files.
 Source roots, hidden working directories and all configured output folders are
 excluded. Organize files into album subdirectories below the watched root.
@@ -150,6 +152,9 @@ Cancellation stops the validator and its child processes; a file transfer that
 has already started is allowed to finish. Release links are stored explicitly.
 Clearing terminal queue history hides entries while preserving ingestion links.
 Bulk review on the Releases page changes human decisions without moving files.
+Generated spectrograms are stored under `reports/` and displayed on track pages;
+analysis does not write derived images into source albums. The small vendored
+engine I/O patch is documented in `vendor/audio-forensic/SOURCE.md`.
 
 Existing SQLite databases are upgraded automatically with additive migrations;
 back up `data/` before upgrading. Keep web and worker on the same version and

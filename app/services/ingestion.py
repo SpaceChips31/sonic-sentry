@@ -12,6 +12,8 @@ from app.services.file_workflow import utc_now
 from app.services.queue import enqueue_paths
 from app.services.settings import workflow_settings
 
+MAX_ENQUEUE_PER_SCAN = 25
+
 
 def scan_sources(*, now: float | None = None) -> int:
     now = time.time() if now is None else now
@@ -26,13 +28,13 @@ def scan_sources(*, now: float | None = None) -> int:
             root = Path(source.path).resolve()
             if not root.is_dir():
                 raise ValueError("Source directory is missing")
-            releases = discover_releases(root, excluded_roots=excluded)
+            releases = discover_releases(root, excluded_roots=excluded, include_root=False, limit=None)
             seen = set()
             for album in releases:
                 if album == root:
                     continue  # Never automatically handle a source root as an album.
                 seen.add(str(album))
-                queued += observe_album(source, album, now, settings["settle_seconds"])
+                queued += observe_album(source, album, now, settings["settle_seconds"], allow_queue=queued < MAX_ENQUEUE_PER_SCAN)
             with SessionLocal() as session:
                 for observation in session.scalars(select(SourceObservation).where(SourceObservation.source_id == source.id)):
                     if observation.path not in seen:
@@ -50,7 +52,7 @@ def scan_sources(*, now: float | None = None) -> int:
     return queued
 
 
-def observe_album(source: AnalysisSource, album: Path, now: float, settle_seconds: int) -> int:
+def observe_album(source: AnalysisSource, album: Path, now: float, settle_seconds: int, *, allow_queue: bool = True) -> int:
     manifest = snapshot(album)
     signature = fingerprint(manifest)
     incomplete = any(Path(name).suffix.lower() in INCOMPLETE_SUFFIXES or name.lower().endswith(".!qb") for name in manifest)
@@ -78,6 +80,10 @@ def observe_album(source: AnalysisSource, album: Path, now: float, settle_second
             return 0
         if incomplete or now - max(observation.stable_since, newest) < settle_seconds:
             observation.message = "Download is incomplete" if incomplete else "Waiting for stable files"
+            session.commit()
+            return 0
+        if not allow_queue:
+            observation.message = "Waiting for the next ingestion batch"
             session.commit()
             return 0
         digest = audio_content_hash(album)

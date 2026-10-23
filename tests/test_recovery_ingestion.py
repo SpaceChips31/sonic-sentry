@@ -329,3 +329,69 @@ def test_reanalysis_invalidates_outdated_content_identity(setup):
     import_report(path)
     with setup.db() as session:
         assert session.get(AnalyzedContent, "old-content") is None
+
+
+def test_loose_root_tracks_do_not_hide_album_subdirectories(setup):
+    report(setup)
+    (setup.inbox / "loose.flac").write_bytes(b"loose")
+    watch_source(setup)
+    now = time.time() + 1
+    ingestion.scan_sources(now=now)
+    assert ingestion.scan_sources(now=now + 600) == 1
+    with setup.db() as session:
+        assert session.scalar(select(AnalysisJob)).source_path == str(setup.inbox / "Album")
+
+
+def test_ingestion_budget_defers_remaining_albums_to_later_scans(setup, monkeypatch):
+    report(setup)
+    other = setup.inbox / "Other"
+    other.mkdir()
+    (other / "track.flac").write_bytes(b"different audio")
+    watch_source(setup)
+    monkeypatch.setattr(ingestion, "MAX_ENQUEUE_PER_SCAN", 1)
+    now = time.time() + 1
+    ingestion.scan_sources(now=now)
+    assert ingestion.scan_sources(now=now + 600) == 1
+    assert ingestion.scan_sources(now=now + 900) == 1
+
+
+def test_spectrograms_are_served_only_from_managed_reports(setup, monkeypatch):
+    from app.services.importer import import_report
+    from app.models import Track
+    reports = setup.root / "reports"
+    reports.mkdir()
+    graph = reports / "graph.png"
+    image = b"\x89PNG\r\n\x1a\nimage"
+    graph.write_bytes(image)
+    path = report(setup)
+    payload = json.loads(path.read_text())
+    payload["files"][0]["forensics"] = {"ok": True, "result": {"spectrogram_path": str(graph)}}
+    path.write_text(json.dumps(payload))
+    import_report(path)
+    monkeypatch.setattr(main, "REPORT_ROOT", reports)
+    with setup.db() as session:
+        track_id = session.scalar(select(Track.id))
+    with TestClient(main.app) as client:
+        assert f'/tracks/{track_id}/spectrogram' in client.get(f"/tracks/{track_id}").text
+        response = client.get(f"/tracks/{track_id}/spectrogram")
+        assert response.status_code == 200 and response.content == image
+        external = setup.root / "private.png"
+        external.write_bytes(image)
+        with setup.db() as session:
+            track = session.get(Track, track_id)
+            track.forensic_json = json.dumps({"result": {"spectrogram_path": str(external)}})
+            session.commit()
+        assert client.get(f"/tracks/{track_id}/spectrogram").status_code == 404
+
+
+def test_forensic_adapter_places_generated_artifacts_outside_album(setup, monkeypatch):
+    from validator import validate_release
+    seen = []
+    def run(command, **kwargs):
+        seen.append(command)
+        return SimpleNamespace(returncode=0, stdout='[{"spectrogram_path":"report/image.png"}]')
+    monkeypatch.setattr(validate_release.subprocess, "run", run)
+    output = setup.root / "reports"
+    result = validate_release.run_forensics(setup.inbox / "track.flac", output)
+    assert result["ok"]
+    assert seen[0][seen[0].index("--spectrogram-dir") + 1] == str(output)

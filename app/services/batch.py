@@ -16,7 +16,8 @@ class BatchDiscoveryError(ValueError):
     pass
 
 
-def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = ()) -> list[Path]:
+def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = (),
+                      include_root: bool = True, limit: int | None = MAX_BATCH_RELEASES) -> list[Path]:
     """Find album roots below *root*, collapsing conventional disc folders."""
     root = root.resolve()
     candidates: set[Path] = set()
@@ -48,10 +49,12 @@ def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = ()) -> l
         except ValueError:
             continue
 
+        if (candidate == root and not include_root) or any(excluded.is_relative_to(candidate) for excluded in excluded_roots):
+            continue
         candidates.add(candidate)
-        if len(candidates) > MAX_BATCH_RELEASES:
+        if limit is not None and len(candidates) > limit:
             raise BatchDiscoveryError(
-                f"More than {MAX_BATCH_RELEASES} releases were found. "
+                f"More than {limit} releases were found. "
                 "Select a smaller artist or library directory."
             )
 
@@ -61,7 +64,7 @@ def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = ()) -> l
     # keep only the parent release.
     result: list[Path] = []
     for candidate in ordered:
-        if any(candidate != parent and candidate.is_relative_to(parent) for parent in ordered):
+        if any(parent in candidates for parent in candidate.parents):
             continue
         result.append(candidate)
 

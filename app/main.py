@@ -6,7 +6,7 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
@@ -632,8 +632,32 @@ def track_detail(request: Request, track_id: int):
             context={
                 "track": track,
                 "spectral": spectral,
+                "has_spectrogram": managed_spectrogram(forensics) is not None,
             },
         )
+
+
+def managed_spectrogram(forensics: dict) -> Path | None:
+    value = forensics.get("result", {}).get("spectrogram_path")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value).resolve()
+    if not path.is_relative_to(REPORT_ROOT.resolve()) or path.suffix.lower() != ".png" or not path.is_file():
+        return None
+    return path
+
+
+@app.get("/tracks/{track_id}/spectrogram")
+def track_spectrogram(track_id: int):
+    with SessionLocal() as session:
+        track = session.get(Track, track_id)
+        path = managed_spectrogram(json.loads(track.forensic_json or "{}")) if track else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="Spectrogram not found in managed report storage")
+    with path.open("rb") as stream:
+        if stream.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise HTTPException(status_code=404, detail="Invalid spectrogram image")
+    return FileResponse(path, media_type="image/png", headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"})
 
 
 @app.post("/tracks/{track_id}/review/{decision}")
