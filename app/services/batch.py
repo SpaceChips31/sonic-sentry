@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 
 
@@ -15,14 +16,27 @@ class BatchDiscoveryError(ValueError):
     pass
 
 
-def discover_releases(root: Path) -> list[Path]:
+def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = (),
+                      include_root: bool = True, limit: int | None = MAX_BATCH_RELEASES) -> list[Path]:
     """Find album roots below *root*, collapsing conventional disc folders."""
     root = root.resolve()
     candidates: set[Path] = set()
 
-    for audio_file in root.rglob("*"):
-        if not audio_file.is_file() or audio_file.suffix.lower() != ".flac":
-            continue
+    def fail(error):
+        raise error
+    def walk_audio():
+        for current, directories, filenames in os.walk(root, followlinks=False, onerror=fail):
+            current = Path(current)
+            if any(current.is_relative_to(excluded) for excluded in excluded_roots):
+                directories[:] = []
+                continue
+            directories[:] = [name for name in directories if not name.startswith('.')
+                               and not (current / name).is_symlink()
+                               and not (hasattr(current / name, 'is_junction') and (current / name).is_junction())]
+            for name in filenames:
+                if Path(name).suffix.lower() == '.flac' and not (current / name).is_symlink():
+                    yield current / name
+    for audio_file in walk_audio():
 
         audio_directory = audio_file.parent.resolve()
         if audio_directory != root and _DISC_DIRECTORY.match(audio_directory.name):
@@ -35,10 +49,12 @@ def discover_releases(root: Path) -> list[Path]:
         except ValueError:
             continue
 
+        if (candidate == root and not include_root) or any(excluded.is_relative_to(candidate) for excluded in excluded_roots):
+            continue
         candidates.add(candidate)
-        if len(candidates) > MAX_BATCH_RELEASES:
+        if limit is not None and len(candidates) > limit:
             raise BatchDiscoveryError(
-                f"More than {MAX_BATCH_RELEASES} releases were found. "
+                f"More than {limit} releases were found. "
                 "Select a smaller artist or library directory."
             )
 
@@ -48,7 +64,7 @@ def discover_releases(root: Path) -> list[Path]:
     # keep only the parent release.
     result: list[Path] = []
     for candidate in ordered:
-        if any(candidate != parent and candidate.is_relative_to(parent) for parent in ordered):
+        if any(parent in candidates for parent in candidate.parents):
             continue
         result.append(candidate)
 

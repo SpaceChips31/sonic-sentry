@@ -1,11 +1,12 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.database import SessionLocal
-from app.models import Release, Track
+from app.models import Release, Track, AnalyzedContent
 from app.services.verdicts import recalculate_release_status
+from app.services.file_workflow import lock_file_operations, check_pending_transfer
 
 
 def import_report(report_path: Path) -> Release:
@@ -34,11 +35,14 @@ def import_report(report_path: Path) -> Release:
         paths.add(path)
 
     with SessionLocal() as session:
+        lock_file_operations(session)
         existing = session.scalar(
             select(Release).where(Release.source_path == source_path)
         )
 
         if existing is not None:
+            check_pending_transfer(session, existing.id)
+            session.execute(delete(AnalyzedContent).where(AnalyzedContent.release_id == existing.id))
             # Keep release identity and file-operation history across reanalysis.
             existing.tracks.clear()
             session.flush()

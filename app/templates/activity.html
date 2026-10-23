@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Activity') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Activity') }}</h1><p>{{ _('Recent transfers and watched albums. Duplicates are reported without moving or deleting files.') }}</p></div><a class="button secondary" href="/activity">{{ _('Refresh') }}</a><a class="button secondary" href="/settings#ingestion">{{ _('Automatic ingestion') }}</a></section>
+<section class="panel activity-panel"><h2>{{ _('File transfers') }}</h2>
+{% for transfer in transfers %}<article class="activity-row">
+<a href="/releases/{{ transfer.release_id }}">{{ _('Release') }} #{{ transfer.release_id }}</a> · <strong>{{ _(transfer.state) }}</strong>
+<code>{{ transfer.source_path }} → {{ transfer.destination_path }}</code>
+{% if transfer.error %}<p class="notice error">{{ transfer.error }}</p>{% endif %}
+{% if transfer.state not in ['COMPLETE','ABANDONED'] %}<form method="post" action="/activity/transfers/{{ transfer.id }}/resume"><button class="button secondary" type="submit">{{ _('Verify and resume') }}</button></form>{% endif %}
+{% if transfer.state in ['NEEDS_ATTENTION','ABANDONED'] %}<code>{{ transfer.temporary_path }}</code>{% endif %}
+{% if transfer.state == 'NEEDS_ATTENTION' %}<form method="post" action="/activity/transfers/{{ transfer.id }}/close"><button class="button secondary" type="submit">{{ _('Close and keep all files') }}</button></form>{% endif %}
+</article>{% else %}<p class="group-empty">{{ _('No file transfers yet.') }}</p>{% endfor %}
+</section>
+<section class="panel activity-panel"><h2>{{ _('Watched albums') }}</h2>
+{% for observation in observations %}<article class="activity-row"><strong>{{ source_names.get(observation.source_id, _('Removed source')) }}</strong> · {{ _(observation.state) }}<code>{{ observation.path }}</code>{% if observation.state == 'DUPLICATE' %}<p>{{ _('Identical FLAC files already analyzed. Files were left in place.') }}</p>{% if duplicate_releases.get(observation.content_hash) %}<a href="/releases/{{ duplicate_releases[observation.content_hash] }}">{{ _('Open result') }}</a>{% endif %}{% elif observation.message %}<p>{{ _(observation.message) }}</p>{% endif %}{% if observation.job_id %}<a href="/analyses">{{ _('Open queue') }} · #{{ observation.job_id }}</a>{% endif %}</article>{% else %}<p class="group-empty">{{ _('Enable folder watching in Settings to start automatic ingestion.') }}</p>{% endfor %}
+</section>
+{% endblock %}

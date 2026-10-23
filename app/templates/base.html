@@ -6,7 +6,7 @@
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml">
     <link rel="stylesheet" href="/static/app.css?v=3">
-    <link rel="stylesheet" href="/static/desktop.css?v=10">
+    <link rel="stylesheet" href="/static/desktop.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -16,6 +16,7 @@
         <a href="/">{{ _('Dashboard') }}</a>
         <a href="/releases">{{ _('Releases') }}</a>
         <a href="/analyses">{{ _('Queue') }}</a>
+        <a href="/activity">{{ _('Activity') }}</a>
         <a href="/settings">{{ _('Settings') }}</a>
         <a class="nav-primary" href="/analyses/new">{{ _('New analysis') }}</a>
     </nav>

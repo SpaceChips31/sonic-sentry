@@ -1,17 +1,26 @@
 {% extends "base.html" %}
-{% macro job_table(jobs) %}<div class="queue-table"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Release') }}</th><th>{{ _('Created') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
-{% for job in jobs %}<tr><td>{{ job.source_type }}</td><td title="{{ job.source_path }}">{% if release_links.get(job.source_path) %}<a href="/releases/{{ release_links[job.source_path] }}">{{ job.display_name }}</a>{% else %}{{ job.display_name }}{% endif %}</td><td>{{ job.created_at }}</td><td><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span>{% if job.status == 'FAILED' %}<form method="post" action="/analyses/{{ job.id }}/retry"><button class="button secondary" type="submit">{{ _('Retry') }}</button></form>{% endif %}</td></tr>{% if job.error %}<tr class="job-error-row"><td colspan="4">{{ job.error }}</td></tr>{% endif %}{% endfor %}
-</tbody></table></div>{% endmacro %}
+{% macro job_table(jobs) %}
+<div class="queue-table"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Release') }}</th><th>{{ _('Progress') }}</th><th>{{ _('Status') }}</th><th>{{ _('Actions') }}</th></tr></thead><tbody>
+{% for job in jobs %}<tr>
+<td>{{ job.source_type }}</td>
+<td title="{{ job.source_path }}">{% set result_id = job.release_id or release_links.get(job.source_path) %}{% if result_id %}<a href="/releases/{{ result_id }}">{{ job.display_name }}</a>{% else %}{{ job.display_name }}{% endif %}<small class="album-path">{{ job.created_at }}</small></td>
+<td>{% if job.progress_total %}<progress value="{{ job.progress }}" max="{{ job.progress_total }}" aria-label="{{ _('Progress') }}"></progress><small>{{ job.progress }} / {{ job.progress_total }}</small>{% else %}—{% endif %}</td>
+<td><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span>{% if job.cancel_requested and job.status == 'ANALYZING' %}<small>{{ _('Cancellation requested') }}</small>{% endif %}</td>
+<td>{% if job.status in ['FAILED','CANCELLED'] %}<form method="post" action="/analyses/{{ job.id }}/retry"><button class="button secondary" type="submit">{{ _('Retry') }}</button></form>{% elif job.status in ['QUEUED','ANALYZING'] and not job.cancel_requested %}<form method="post" action="/analyses/{{ job.id }}/cancel"><button class="button secondary" type="submit">{{ _('Cancel') }}</button></form>{% endif %}</td>
+</tr>{% if job.error %}<tr class="job-error-row"><td colspan="5">{{ job.error }} {% if job.release_id %}<a href="/activity">{{ _('Activity') }}</a>{% endif %}</td></tr>{% endif %}{% endfor %}
+</tbody></table></div>
+{% endmacro %}
 {% block title %}{{ _('Analysis queue') }} · {{ app_name }}{% endblock %}
 {% block content %}
-<section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Analysis queue') }}</h1></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
+<section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Analysis queue') }}</h1><p>{{ _('Cancellation stops analysis before file routing. Transfers finish safely once started.') }}</p></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
 {% if has_active_jobs %}<div class="queue-live" role="status"><span class="live-dot"></span>{{ _('Live updates active · refreshing every 3 seconds') }}</div>{% endif %}
 <div class="queue-groups">
-{% for status, empty_text, css in [('ANALYZING','No analysis currently running.','analyzing'),('QUEUED','No releases waiting.','queued'),('FAILED','No failed analyses.','failed'),('COMPLETED','No completed analyses.','completed')] %}
-<details class="queue-group {{ css }}-group" {% if job_groups[status] and status in ['ANALYZING','QUEUED'] %}open{% endif %}><summary><span>{{ _(status.title()) }}</span><span class="summary-actions"><span class="group-count">{{ job_groups[status]|length }}</span>
-{% if status in ['FAILED','COMPLETED'] and job_groups[status] %}<form method="post" action="/analyses/clear/{{ status|lower }}"><button class="clear-button" type="submit">{{ _('Clear') }}</button></form>{% endif %}</span></summary>
+{% for status, empty_text in [('ANALYZING','No analysis currently running.'),('ROUTING','No transfers running.'),('QUEUED','No releases waiting.'),('FAILED','No failed analyses.'),('COMPLETED','No completed analyses.'),('CANCELLED','No cancelled analyses.')] %}
+<details class="queue-group {{ status|lower }}-group" {% if job_groups[status] and status in ['ANALYZING','ROUTING','QUEUED','FAILED'] %}open{% endif %}>
+<summary><span>{{ _(status.title()) }}</span><span class="group-count">{{ job_groups[status]|length }}</span></summary>
+{% if status in ['FAILED','COMPLETED','CANCELLED'] and job_groups[status] %}<form class="history-clear" method="post" action="/analyses/clear/{{ status|lower }}"><button class="clear-button" type="submit">{{ _('Clear') }}</button></form>{% endif %}
 {% if job_groups[status] %}{{ job_table(job_groups[status]) }}{% else %}<p class="group-empty">{{ _(empty_text) }}</p>{% endif %}</details>
 {% endfor %}
 </div>
-{% if has_active_jobs %}<script>window.setTimeout(() => window.location.reload(), 3000);</script>{% endif %}
+{% if has_active_jobs %}<script>window.setTimeout(() => { if(!document.hidden) window.location.reload(); }, 3000);</script>{% endif %}
 {% endblock %}

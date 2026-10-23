@@ -22,6 +22,7 @@
     <div class="source-item {{ 'disabled' if not source.enabled }}">
       <span><strong>{{ source.name }}</strong><small>{{ source.kind }}</small><code>{{ source.path }}</code></span>
       <span class="source-actions">
+        <form method="post" action="/settings/sources/{{ source.id }}/watch"><button class="button secondary" type="submit">{{ _('Stop watching') if source.watch_enabled else _('Watch folder') }}</button></form>
         <form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
         <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit='return confirm({{ _('Remove source confirm')|tojson }})'><button class="button danger" type="submit">{{ _('Remove') }}</button></form>
       </span>
@@ -59,5 +60,14 @@
 {% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
 <article class="panel settings-card"><h2>{{ name }}</h2><code>{{ item.path }}</code><p><span class="badge {{ 'pass' if item.exists else 'rejected' }}">{{ _('Found') if item.exists else _('Missing') }}</span> <span class="badge {{ 'pass' if item.writable else 'rejected' }}">{{ _('Writable') if item.writable else _('Read only') }}</span></p></article>
 {% endfor %}
+</section>
+<section class="panel settings-panel" id="ingestion">
+<h2>{{ _('Automatic ingestion') }}</h2><p>{{ _('Enable watching on each source above. Only stable albums are queued; partial downloads and output folders are excluded. Exact FLAC duplicates stay in place.') }}</p>
+<form class="workflow-form" method="post" action="/settings/ingestion">
+<label>{{ _('Scan interval (seconds)') }}<input type="number" name="scan_interval" min="10" max="86400" value="{{ workflow.scan_interval }}" required></label>
+<label>{{ _('Wait for stable files (seconds)') }}<input type="number" name="settle_seconds" min="30" max="86400" value="{{ workflow.settle_seconds }}" required></label>
+<button class="button success" type="submit">{{ _('Save ingestion settings') }}</button>
+</form><p><a href="/activity">{{ _('View ingestion and transfer activity') }}</a></p>
+{% for source in sources %}{% if source.watch_enabled %}<div class="settings-row"><span>{{ source.name }} — {{ _('Watching') if source.enabled else _('Disabled') }}</span><span>{{ source.last_scan_at or '—' }}</span></div>{% if source.watch_error %}<p class="notice error">{{ source.watch_error }}</p>{% endif %}{% endif %}{% endfor %}
 </section>
 {% endblock %}

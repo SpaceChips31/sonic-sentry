@@ -7,11 +7,24 @@
   <label>{{ _('Final status') }}<select name="status"><option value="">{{ _('All releases') }}</option>{% for value in ['PASS', 'QUARANTINE', 'REJECTED'] %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|human_status }}</option>{% endfor %}</select></label>
   <button class="button secondary" type="submit">{{ _('Filter') }}</button>
 </form>
+<form method="post" action="/releases/review">
+<div class="bulk-actions"><label>{{ _('Selected albums') }}<select name="decision"><option value="approve">{{ _('Approve') }}</option><option value="reject">{{ _('Reject') }}</option><option value="reset">{{ _('Reset') }}</option></select></label><button class="button secondary" id="bulk-submit" disabled type="submit">{{ _('Apply review') }}</button><small>{{ _('Changes review decisions only. Use the album workflow to move files.') }}</small></div>
 <section class="panel table-scroll">
-{% if releases %}<table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Tracks') }}</th><th>{{ _('Final status') }}</th></tr></thead><tbody>
-{% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a><small class="album-path">{{ release.source_path }}</small></td><td>{{ release.total_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
+{% if releases %}<table><thead><tr><th><input type="checkbox" id="select-all" aria-label="{{ _('Select all albums') }}"></th><th>{{ _('Release') }}</th><th>{{ _('Tracks') }}</th><th>{{ _('Final status') }}</th></tr></thead><tbody>
+{% for release in releases %}<tr><td><input type="checkbox" name="release_ids" value="{{ release.id }}" aria-label="{{ release.title }}"></td><td><a href="/releases/{{ release.id }}">{{ release.title }}</a><small class="album-path">{{ release.source_path }}</small></td><td>{{ release.total_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
 </tbody></table>{% else %}<div class="empty"><p>{{ _('No matching releases.') }}</p><a href="/analyses/new">{{ _('New analysis') }}</a></div>{% endif %}
 </section>
+</form>
+<script>
+const all = document.getElementById('select-all'), boxes = [...document.querySelectorAll('input[name="release_ids"]')];
+function updateSelection() {
+  const count = boxes.filter(input => input.checked).length;
+  document.getElementById('bulk-submit').disabled = count === 0;
+  if (all) { all.checked = count > 0 && count === boxes.length; all.indeterminate = count > 0 && count < boxes.length; }
+}
+all?.addEventListener('change', event => { boxes.forEach(input => {input.checked = event.target.checked;}); updateSelection(); });
+boxes.forEach(input => input.addEventListener('change', updateSelection));
+</script>
 <nav class="pagination" aria-label="{{ _('Pages') }}">
 {% if page > 1 %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&page={{ page-1 }}">← {{ _('Previous') }}</a>{% endif %}
 <span>{{ page }} / {{ pages }}</span>

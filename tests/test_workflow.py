@@ -12,31 +12,6 @@ from app.models import AnalysisJob, AnalysisSource, Release, ReleaseOperation
 from app.services import file_workflow, importer, settings, sources
 
 
-@pytest.fixture
-def setup(tmp_path, monkeypatch):
-    engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
-    factory = sessionmaker(engine, expire_on_commit=False)
-    Base.metadata.create_all(engine)
-    for module in (main, worker, workflow, file_workflow, importer, settings, sources):
-        monkeypatch.setattr(module, "SessionLocal", factory)
-    monkeypatch.setattr(main, "engine", engine)
-    monkeypatch.setattr(sources, "SOURCE_ROOTS", ())
-    monkeypatch.setattr(sources, "SOURCE_BASE", tmp_path)
-    monkeypatch.setattr(config, "FILE_OPERATIONS_ENABLED", False)
-    monkeypatch.setattr(config, "AUTO_ROUTE_RELEASES", False)
-    monkeypatch.setattr(config, "MOVABLE_ROOTS", ())
-    monkeypatch.setattr(config, "STAGING_ROOT", None)
-    monkeypatch.setattr(config, "QUARANTINE_ROOT", None)
-    monkeypatch.setattr(config, "REJECTED_ROOT", None)
-    inbox = tmp_path / "inbox"
-    inbox.mkdir()
-    targets = {}
-    for key in ("staging", "quarantine", "rejected"):
-        path = tmp_path / key
-        path.mkdir()
-        targets[key] = str(path)
-    yield SimpleNamespace(db=factory, root=tmp_path, inbox=inbox, targets=targets)
-    engine.dispose()
 
 
 def configure(env, policy="pass"):
@@ -174,7 +149,7 @@ def test_move_failure_rolls_back_manual_approval(setup, monkeypatch):
     release = importer.import_report(report(setup, "QUARANTINE"))
     def fail(*args, **kwargs):
         raise OSError("read only")
-    monkeypatch.setattr(file_workflow.shutil, "move", fail)
+    monkeypatch.setattr(file_workflow.shutil, "copytree", fail)
     with pytest.raises(file_workflow.FileOperationError, match="could not move"):
         file_workflow.move_release(release.id, "STAGING", manual_pass=True)
     with setup.db() as session:
@@ -257,7 +232,7 @@ def test_routing_failure_keeps_analysis_completed_with_warning(setup, monkeypatc
     def run(*args, **kwargs):
         (setup.root / "job-1.json").write_text(payload)
         return SimpleNamespace(stdout="OK", returncode=0)
-    monkeypatch.setattr(worker.subprocess, "run", run)
+    monkeypatch.setattr(worker, "run_validator", run)
     with setup.db() as session:
         session.add(AnalysisJob(id=1, source_type="FILESYSTEM", source_path=str(setup.inbox / "Album"),
                                 display_name="Album", status="ANALYZING", created_at="now"))

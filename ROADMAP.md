@@ -1,7 +1,16 @@
 # SonicSentry roadmap
 
-This roadmap records likely directions after the 0.1 release. Items are not
+This roadmap records remaining directions after the 0.2 release. Items are not
 promises and may be reordered as the real music workflow evolves.
+
+## Delivered in 0.2
+
+- Configurable folder watching with persistent stability checks
+- Exact-file duplicate detection without deleting duplicates
+- Verified, journaled album transfers with restart recovery and operator resolution
+- Track progress, cancellation, retry and explicit result links
+- Bulk album review, ingestion history and file-transfer activity
+- Additive database upgrades and a real-FLAC container smoke test
 
 ## Access and security
 
@@ -18,9 +27,9 @@ trusted private network without adding unnecessary setup.
 ## Analysis workflow
 
 - Resumable and scheduled library scans
-- Better duplicate-release detection
+- Audio-level duplicate comparison beyond exact FLAC-file hashes
 - Configurable quality policies and per-source defaults
-- Richer batch progress, cancellation, and retry controls
+- Richer batch grouping and scheduling beyond track progress, cancellation and retry
 - Comparison between different editions of the same album
 
 ## Sources and integrations
@@ -39,7 +48,7 @@ trusted private network without adding unnecessary setup.
 
 ## Operations
 
-- Database migrations and documented backup/restore procedures
+- Versioned migration tooling and guided backup/restore procedures beyond additive upgrades
 - Health and metrics endpoints suitable for monitoring
 - Multi-architecture container images
 - Configurable retention for reports, uploads, and completed jobs

@@ -27,6 +27,10 @@
   </article>
 </section>
 <section class="panel detail-card evidence-section"><h2>{{ _('Natural lossless indicators') }}</h2><ul class="evidence natural">{% for item in spectral.get("natural_evidence", []) %}<li>{{ item|evidence_text }}</li>{% else %}<li>{{ _('No natural indicators recorded.') }}</li>{% endfor %}</ul></section>
+<section class="panel detail-card"><h2>{{ _('Spectrogram') }}</h2>
+{% if has_spectrogram %}<a href="/tracks/{{ track.id }}/spectrogram" target="_blank" rel="noopener"><img class="spectrogram" src="/tracks/{{ track.id }}/spectrogram" alt="{{ _('Spectrogram of this track') }}" loading="lazy"></a>
+{% else %}<p>{{ _('No managed spectrogram is available. Run a new analysis to generate it.') }}</p>{% endif %}
+</section>
 {% if track.status == "QUARANTINE" %}
 <section class="review-box"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ track.human_review|human_review }}</h2><p>{{ _('Automatic verdict unchanged') }}</p></div>
 <div class="review-actions"><form method="post" action="/tracks/{{ track.id }}/review/reject"><button class="button danger" type="submit">{{ _('Reject') }}</button></form>

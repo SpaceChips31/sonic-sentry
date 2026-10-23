@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel settings-panel"><p class="eyebrow">{{ status_code }}</p><h1>{{ _('Something needs your attention') }}</h1><p class="notice error" role="alert">{{ error }}</p><button class="button secondary" type="button" onclick="history.back()">{{ _('Go back') }}</button> <a class="button secondary" href="/activity">{{ _('Activity') }}</a></section>
+{% endblock %}

@@ -6,15 +6,20 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
-from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation
+from app.migrations import initialize_database
+from app.services.queue import enqueue_paths
+from app.services.file_workflow import check_pending_transfer, check_active_jobs, lock_file_operations, FileOperationError
+from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer
 from app.services.verdicts import recalculate_release_status
 from app.services.settings import workflow_settings
 from app.services.batch import BatchDiscoveryError, discover_releases
@@ -26,7 +31,7 @@ from app.version import APP_NAME, APP_VERSION
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    initialize_database(engine)
     seed_analysis_sources()
     yield
 
@@ -39,6 +44,14 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = configure_templates(Jinja2Templates(directory="app/templates"))
+
+@app.exception_handler(StarletteHTTPException)
+async def explain_http_error(request: Request, exc: StarletteHTTPException):
+    if "text/html" in request.headers.get("accept", ""):
+        return templates.TemplateResponse(request=request, name="error.html", status_code=exc.status_code,
+                                          context={"error": exc.detail, "status_code": exc.status_code})
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+
 
 ALLOWED_UPLOAD_EXTENSIONS = {
     ".flac",
@@ -151,6 +164,7 @@ def dashboard(request: Request):
             status: count
             for status, count in session.execute(
                 select(AnalysisJob.status, func.count(AnalysisJob.id))
+                .where(AnalysisJob.hidden.is_(False))
                 .group_by(AnalysisJob.status)
             )
         }
@@ -177,7 +191,7 @@ def dashboard(request: Request):
         )
         active_jobs = session.scalars(
             select(AnalysisJob)
-            .where(AnalysisJob.status.in_({"ANALYZING", "QUEUED"}))
+            .where(AnalysisJob.status.in_({"ANALYZING", "QUEUED", "ROUTING"}))
             .order_by(active_priority, AnalysisJob.id)
             .limit(10)
         ).all()
@@ -195,6 +209,7 @@ def dashboard(request: Request):
                 "has_active_jobs": bool(
                     job_counters.get("ANALYZING", 0)
                     or job_counters.get("QUEUED", 0)
+                    or job_counters.get("ROUTING", 0)
                 ),
             },
         )
@@ -212,7 +227,7 @@ def analyses(request: Request):
         )
 
         jobs = session.scalars(
-            select(AnalysisJob).order_by(
+            select(AnalysisJob).where(AnalysisJob.hidden.is_(False)).order_by(
                 status_priority,
                 AnalysisJob.id.desc(),
             )
@@ -230,6 +245,8 @@ def analyses(request: Request):
             for status in (
                 "ANALYZING",
                 "QUEUED",
+                "ROUTING",
+                "CANCELLED",
                 "FAILED",
                 "COMPLETED",
             )
@@ -238,6 +255,7 @@ def analyses(request: Request):
         has_active_jobs = bool(
             job_groups["ANALYZING"]
             or job_groups["QUEUED"]
+            or job_groups["ROUTING"]
         )
 
         return templates.TemplateResponse(
@@ -273,17 +291,25 @@ def releases_page(request: Request, q: str = "", status: str = "", page: int = 1
 @app.post("/analyses/{job_id}/retry")
 def retry_analysis(job_id: int):
     with SessionLocal() as session:
+        lock_file_operations(session)
         job = session.get(AnalysisJob, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Analysis not found")
-        if job.status != "FAILED":
-            raise HTTPException(status_code=409, detail="Only failed analyses can be retried")
+        if job.status not in {"FAILED", "CANCELLED"}:
+            raise HTTPException(status_code=409, detail="Only failed or cancelled analyses can be retried")
         if not Path(job.source_path).is_dir():
             raise HTTPException(status_code=409, detail="Source directory no longer exists")
-        if session.scalar(select(AnalysisJob.id).where(AnalysisJob.source_path == job.source_path,
-                                                     AnalysisJob.status.in_({"QUEUED", "ANALYZING"}))):
-            raise HTTPException(status_code=409, detail="Analysis already queued")
+        try:
+            check_active_jobs(session, Path(job.source_path))
+            if job.release_id:
+                check_pending_transfer(session, job.release_id)
+        except FileOperationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         job.status = "QUEUED"
+        job.hidden = False
+        job.cancel_requested = False
+        job.progress = job.progress_total = 0
+        job.started_at = job.finished_at = None
         job.error = None
         session.commit()
     return RedirectResponse("/analyses", status_code=303)
@@ -293,7 +319,7 @@ def retry_analysis(job_id: int):
 def clear_analysis_history(status: str):
     normalized = status.upper()
 
-    if normalized not in {"COMPLETED", "FAILED"}:
+    if normalized not in {"COMPLETED", "FAILED", "CANCELLED"}:
         raise HTTPException(
             status_code=400,
             detail="Only completed or failed jobs can be cleared",
@@ -301,8 +327,8 @@ def clear_analysis_history(status: str):
 
     with SessionLocal() as session:
         session.execute(
-            delete(AnalysisJob)
-            .where(AnalysisJob.status == normalized)
+            update(AnalysisJob)
+            .where(AnalysisJob.status == normalized).values(hidden=True)
         )
         session.commit()
 
@@ -426,21 +452,8 @@ def create_container_analysis(
             detail="The selected directory contains no FLAC files",
         )
 
-    with SessionLocal() as session:
-        if session.scalar(select(AnalysisJob.id).where(
-            AnalysisJob.source_path == str(source),
-            AnalysisJob.status.in_({"QUEUED", "ANALYZING"}),
-        )):
-            raise HTTPException(status_code=409, detail="This release is already queued or being analyzed")
-        job = AnalysisJob(
-            source_type=configured_source.kind,
-            source_path=str(source),
-            display_name=source.name,
-            status="QUEUED",
-            created_at=utc_now(),
-        )
-        session.add(job)
-        session.commit()
+    if not enqueue_paths([source], configured_source.kind):
+        raise HTTPException(status_code=409, detail="This album overlaps an active analysis or transfer")
 
     return RedirectResponse("/analyses", status_code=303)
 
@@ -462,38 +475,8 @@ def create_batch_analysis(
             detail="No FLAC releases were found below the selected directory",
         )
 
-    created = 0
-    with SessionLocal() as session:
-        active_paths = set(
-            session.scalars(
-                select(AnalysisJob.source_path).where(
-                    AnalysisJob.status.in_({"QUEUED", "ANALYZING"})
-                )
-            ).all()
-        )
-
-        for release_path in releases:
-            path_text = str(release_path)
-            if path_text in active_paths:
-                continue
-            session.add(
-                AnalysisJob(
-                    source_type=f"{configured_source.kind}_BATCH",
-                    source_path=path_text,
-                    display_name=release_path.name,
-                    status="QUEUED",
-                    created_at=utc_now(),
-                )
-            )
-            created += 1
-
-        session.commit()
-
-    if not created:
-        raise HTTPException(
-            status_code=409,
-            detail="All discovered releases are already queued or being analyzed",
-        )
+    if not enqueue_paths(releases, f"{configured_source.kind}_BATCH"):
+        raise HTTPException(status_code=409, detail="All discovered albums overlap active analyses or transfers")
 
     return RedirectResponse("/analyses", status_code=303)
 
@@ -621,7 +604,9 @@ def release_detail(request: Request, release_id: int):
         return templates.TemplateResponse(
             request=request,
             name="release.html",
-            context={"release": release, "file_operations_enabled": workflow_settings()["enabled"]},
+            context={"release": release, "file_operations_enabled": workflow_settings()["enabled"],
+                     "pending_transfer": session.scalar(select(FileTransfer.id).where(FileTransfer.release_id == release.id,
+                                                                                   FileTransfer.state.not_in({"COMPLETE", "ABANDONED"})))},
         )
 
 
@@ -647,8 +632,32 @@ def track_detail(request: Request, track_id: int):
             context={
                 "track": track,
                 "spectral": spectral,
+                "has_spectrogram": managed_spectrogram(forensics) is not None,
             },
         )
+
+
+def managed_spectrogram(forensics: dict) -> Path | None:
+    value = forensics.get("result", {}).get("spectrogram_path")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value).resolve()
+    if not path.is_relative_to(REPORT_ROOT.resolve()) or path.suffix.lower() != ".png" or not path.is_file():
+        return None
+    return path
+
+
+@app.get("/tracks/{track_id}/spectrogram")
+def track_spectrogram(track_id: int):
+    with SessionLocal() as session:
+        track = session.get(Track, track_id)
+        path = managed_spectrogram(json.loads(track.forensic_json or "{}")) if track else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="Spectrogram not found in managed report storage")
+    with path.open("rb") as stream:
+        if stream.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise HTTPException(status_code=404, detail="Invalid spectrogram image")
+    return FileResponse(path, media_type="image/png", headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"})
 
 
 @app.post("/tracks/{track_id}/review/{decision}")
@@ -663,6 +672,7 @@ def review_track(track_id: int, decision: str):
         raise HTTPException(status_code=400, detail="Invalid decision")
 
     with SessionLocal() as session:
+        lock_file_operations(session)
         track = session.scalar(
             select(Track)
             .where(Track.id == track_id)
@@ -681,6 +691,11 @@ def review_track(track_id: int, decision: str):
                 detail="Only quarantined tracks can be reviewed",
             )
 
+        try:
+            check_pending_transfer(session, track.release_id)
+            check_active_jobs(session, Path(track.release.source_path))
+        except FileOperationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         track.human_review = decisions[decision]
         recalculate_release_status(track.release)
         session.commit()

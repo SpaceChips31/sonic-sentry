@@ -6,6 +6,7 @@ Audio Forensics CLI — comprehensive audio authenticity analysis
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -893,7 +894,7 @@ def audit_replaygain(tags: AudioTags, lufs_integrated: str) -> tuple[str, str, s
     except (ValueError, IndexError): return stored_raw, lufs_integrated, "", ""
 
 
-def generate_spectrogram(filepath: Path, duration_sec: float = 0.0) -> Optional[Path]:
+def generate_spectrogram(filepath: Path, duration_sec: float = 0.0, output_dir: Optional[Path] = None) -> Optional[Path]:
     """Generates a clean mono spectrogram (SoX rendering — best visual quality).
 
     The decoded mono WAV is piped from ffmpeg straight into SoX's stdin: no temp
@@ -908,7 +909,13 @@ def generate_spectrogram(filepath: Path, duration_sec: float = 0.0) -> Optional[
     1280 px width. NB: plain seconds only — a bare ``s`` suffix means *samples*
     in SoX time syntax, and ``"240.0s"`` is an outright parse error.
     """
-    output = filepath.with_name(f"{filepath.stem}_spectrogram.png")
+    if output_dir is None:
+        output = filepath.with_name(f"{filepath.stem}_spectrogram.png")
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        name = hashlib.sha256(str(filepath.resolve()).encode("utf-8")).hexdigest()[:24]
+        output = output_dir / f"{name}.png"
+        output.unlink(missing_ok=True)
 
     decode = subprocess.run(
         ["ffmpeg", "-v", "error", "-i", str(filepath), "-vn",
@@ -2490,7 +2497,7 @@ class SpectralEngine:
 # ---------------------------------------------------------------------------
 # Report Building
 # ---------------------------------------------------------------------------
-def build_report(filepath: Path, fast_secs: Optional[float] = None) -> ForensicReport:
+def build_report(filepath: Path, fast_secs: Optional[float] = None, spectrogram_dir: Optional[Path] = None) -> ForensicReport:
     t_start = time.perf_counter()
     name = filepath.name
     _Status.update(name, "probing metadata")
@@ -2527,7 +2534,7 @@ def build_report(filepath: Path, fast_secs: Optional[float] = None) -> ForensicR
     with ThreadPoolExecutor(max_workers=4) as pool:
         f_loud = pool.submit(extract_loudness, filepath)
         f_sox = pool.submit(extract_sox_stats, filepath)
-        f_spec = pool.submit(generate_spectrogram, filepath, tech.duration_sec)
+        f_spec = pool.submit(generate_spectrogram, filepath, tech.duration_sec, spectrogram_dir)
         f_bits = pool.submit(check_bit_depth_authenticity, filepath, claimed_depth, tech.duration_sec, sample_rate, channels)
         spectral = engine.analyse(max_seconds=fast_secs, status=lambda s: _Status.update(name, s))
         _Status.update(name, "waiting on loudness/spectrogram")
@@ -3182,6 +3189,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="audio_forensic", description="Audio Forensics CLI — comprehensive audio authenticity analysis")
     parser.add_argument("files", nargs="*", help="Audio file(s) to analyse")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+    parser.add_argument("--spectrogram-dir", type=Path, help="Store generated spectrograms outside the input directory")
     parser.add_argument("--fast", action="store_true", help="Analyse first 60s only")
     parser.add_argument("--info", action="store_true", help="Only show basic metadata")
     parser.add_argument("--workers", type=int, default=0, help="Concurrent files in batch mode (default: auto, up to 3)")
@@ -3226,9 +3234,9 @@ def main() -> None:
     _Status.begin(len(paths), workers if len(paths) > 1 else 1)
     if len(paths) > 1 and workers > 1:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            reports = list(pool.map(lambda p: build_report(p, fast_secs=fast), paths))
+            reports = list(pool.map(lambda p: build_report(p, fast_secs=fast, spectrogram_dir=args.spectrogram_dir), paths))
     else:
-        reports = [build_report(p, fast_secs=fast) for p in paths]
+        reports = [build_report(p, fast_secs=fast, spectrogram_dir=args.spectrogram_dir) for p in paths]
     _Status.clear()
     if args.json:
         if args.compare:

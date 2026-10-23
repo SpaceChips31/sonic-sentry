@@ -16,6 +16,8 @@ def workflow_settings() -> dict:
         "enabled": config.FILE_OPERATIONS_ENABLED,
         "auto_route": config.AUTO_ROUTE_RELEASES,
         "route_nonpass": True,
+        "scan_interval": 60,
+        "settle_seconds": 300,
         "movable_roots": [str(p) for p in config.MOVABLE_ROOTS],
         "staging": str(config.STAGING_ROOT) if config.STAGING_ROOT else "",
         "quarantine": str(config.QUARANTINE_ROOT) if config.QUARANTINE_ROOT else "",
@@ -70,9 +72,25 @@ def save_workflow_settings(*, enabled: bool, policy: str, movable_roots: str,
     payload = dict(enabled=enabled, auto_route=policy != "manual", route_nonpass=policy == "all",
                    movable_roots=roots, **targets)
     with SessionLocal() as session:
+        from app.services.file_workflow import lock_file_operations
+        lock_file_operations(session)
         saved = session.get(WorkflowSettings, 1)
         if saved is None:
             saved = WorkflowSettings(id=1, payload="{}")
             session.add(saved)
-        saved.payload = json.dumps(payload)
+        saved.payload = json.dumps({**json.loads(saved.payload), **payload})
+        session.commit()
+
+
+def save_ingestion_settings(scan_interval: int, settle_seconds: int) -> None:
+    if not 10 <= scan_interval <= 86400 or not 30 <= settle_seconds <= 86400:
+        raise WorkflowConfigurationError("Scan interval must be 10–86400 seconds; stability wait must be 30–86400 seconds.")
+    with SessionLocal() as session:
+        from app.services.file_workflow import lock_file_operations
+        lock_file_operations(session)
+        saved = session.get(WorkflowSettings, 1)
+        if saved is None:
+            saved = WorkflowSettings(id=1, payload="{}")
+            session.add(saved)
+        saved.payload = json.dumps({**json.loads(saved.payload), "scan_interval": scan_interval, "settle_seconds": settle_seconds})
         session.commit()
