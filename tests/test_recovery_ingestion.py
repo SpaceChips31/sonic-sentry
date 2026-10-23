@@ -395,3 +395,38 @@ def test_forensic_adapter_places_generated_artifacts_outside_album(setup, monkey
     result = validate_release.run_forensics(setup.inbox / "track.flac", output)
     assert result["ok"]
     assert seen[0][seen[0].index("--spectrogram-dir") + 1] == str(output)
+
+
+def test_timestamp_normalization_does_not_look_like_changed_audio(setup, monkeypatch):
+    import os
+    path = report(setup)
+    payload = path.read_text()
+    job_id = queue.enqueue_paths([setup.inbox / "Album"], "FILESYSTEM")[0]
+    monkeypatch.setattr(worker, "REPORT_ROOT", setup.root)
+    def run(job_id, source, destination):
+        destination.write_text(payload)
+        os.utime(source / "track.flac", (1000, 1000))
+        return SimpleNamespace(stdout="OK", returncode=0)
+    monkeypatch.setattr(worker, "run_validator", run)
+    worker.process_job({"id": job_id, "source_path": str(setup.inbox / "Album")})
+    with setup.db() as session:
+        assert session.get(AnalysisJob, job_id).status == "COMPLETED"
+
+
+def test_large_album_preparation_does_not_block_settings_writes(setup, monkeypatch):
+    from app.services.importer import import_report
+    configure(setup)
+    release = import_report(report(setup))
+    original = file_workflow.snapshot
+    checked = False
+    def read_files(path, **kwargs):
+        nonlocal checked
+        if kwargs.get("hashes") and not checked:
+            checked = True
+            with setup.db() as session:
+                session.execute(text("UPDATE workflow_settings SET payload=payload WHERE id=1"))
+                session.commit()
+        return original(path, **kwargs)
+    monkeypatch.setattr(file_workflow, "snapshot", read_files)
+    file_workflow.move_release(release.id, "STAGING")
+    assert checked

@@ -14,7 +14,7 @@ from app.migrations import initialize_database
 from app.models import AnalysisJob, AnalyzedContent, FileTransfer
 from app.services.importer import import_report
 from app.services.file_workflow import FileOperationError, auto_route_release, recover_transfers, utc_now, lock_file_operations
-from app.services.files import audio_content_hash, fingerprint, snapshot
+from app.services.files import manifest_audio_hash, same_content, snapshot
 from app.services.ingestion import scan_sources
 from app.services.locks import process_lock
 from app.services.settings import workflow_settings
@@ -138,7 +138,7 @@ def process_job(job):
     try:
         if cancellation_requested(job_id):
             raise AnalysisCancelled()
-        before = fingerprint(snapshot(source))
+        before = snapshot(source, hashes=True)
         report.unlink(missing_ok=True)
         proc = run_validator(job_id, source, report)
         print(proc.stdout, flush=True)
@@ -146,9 +146,13 @@ def process_job(job):
             raise RuntimeError(f"validator exited with code {proc.returncode}")
         if not report.is_file():
             raise RuntimeError("validator did not create a report")
-        digest = audio_content_hash(source)
-        if fingerprint(snapshot(source)) != before:
-            raise RuntimeError("Album changed during analysis; files were not routed. Retry once the download is complete.")
+        after = snapshot(source, hashes=True)
+        if not same_content(after, before):
+            changed = sorted(name for name in before.keys() | after.keys()
+                             if name not in before or name not in after or before[name]["sha256"] != after[name]["sha256"])
+            raise RuntimeError("Album changed during analysis; files were not routed. Retry once the download is complete. "
+                               + ", ".join(changed[:10]))
+        digest = manifest_audio_hash(after)
         if cancellation_requested(job_id):
             raise AnalysisCancelled()
         release = import_report(report)

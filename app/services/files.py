@@ -62,6 +62,13 @@ def audio_content_hash(root: Path) -> str:
     return hashlib.sha256("\n".join(hashes).encode()).hexdigest()
 
 
+def manifest_audio_hash(manifest: dict) -> str:
+    hashes = sorted(item["sha256"] for name, item in manifest.items() if Path(name).suffix.lower() == ".flac")
+    if not hashes:
+        raise ValueError("Album contains no FLAC files")
+    return hashlib.sha256("\n".join(hashes).encode()).hexdigest()
+
+
 def same_content(actual: dict, expected: dict) -> bool:
     return actual.keys() == expected.keys() and all(
         actual[name]["size"] == expected[name]["size"] and actual[name]["sha256"] == expected[name]["sha256"]

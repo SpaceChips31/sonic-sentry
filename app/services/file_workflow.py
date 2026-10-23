@@ -239,14 +239,27 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
     try:
         with process_lock("file-workflow"):
             with SessionLocal() as session:
-                lock_file_operations(session)
-                release = session.scalar(select(Release).where(Release.id == release_id).options(selectinload(Release.tracks)))
+                release = session.get(Release, release_id)
                 if release is None:
                     raise FileOperationError("release not found")
                 check_pending_transfer(session, release_id)
                 source = validate_source(Path(release.source_path), settings)
                 check_active_jobs(session, source, current_job_id)
-                destination = destination_for(source, normalized, settings)
+            destination = destination_for(source, normalized, settings)
+            # Slow disk reads must not hold SQLite's writer lock.
+            manifest = snapshot(source, hashes=True)
+            if not manifest:
+                raise FileOperationError("album is empty")
+            if shutil.disk_usage(destination.parent).free < sum(item["size"] for item in manifest.values()):
+                raise FileOperationError("not enough free space for a verified copy")
+            with SessionLocal() as session:
+                lock_file_operations(session)
+                release = session.scalar(select(Release).where(Release.id == release_id).options(selectinload(Release.tracks)))
+                if release is None or Path(release.source_path).resolve() != source:
+                    raise FileOperationError("release changed while preparing its transfer")
+                check_pending_transfer(session, release_id)
+                validate_source(source, settings)
+                check_active_jobs(session, source, current_job_id)
                 previous_status = release.status
                 previous_reviews = [track.human_review for track in release.tracks]
                 if manual_pass:
@@ -258,11 +271,6 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 release.status = previous_status
                 for track, review in zip(release.tracks, previous_reviews):
                     track.human_review = review
-                manifest = snapshot(source, hashes=True)
-                if not manifest:
-                    raise FileOperationError("album is empty")
-                if shutil.disk_usage(destination.parent).free < sum(item["size"] for item in manifest.values()):
-                    raise FileOperationError("not enough free space for a verified copy")
                 transfer_id = uuid4().hex
                 session.add(FileTransfer(id=transfer_id, release_id=release_id, job_id=current_job_id, source_path=str(source),
                     destination_path=str(destination), temporary_path=str(destination.parent / f".sonic-sentry-{transfer_id}.partial"),
@@ -271,7 +279,7 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 # Approval is applied only when publication has been verified.
                 session.commit()
             return run_transfer(transfer_id)
-    except RuntimeError as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         if isinstance(exc, FileOperationError):
             raise
         raise FileOperationError(str(exc)) from exc
