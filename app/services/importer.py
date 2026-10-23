@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import Release, Track
+from app.services.verdicts import recalculate_release_status
 
 
 def import_report(report_path: Path) -> Release:
@@ -14,9 +15,23 @@ def import_report(report_path: Path) -> Release:
     if payload.get("schema_version") != 1:
         raise ValueError("Unsupported or missing report schema_version")
 
-    source_path = payload["release"]
+    source_path = str(Path(payload["release"]).resolve())
     source = Path(source_path)
-    summary = payload["summary"]
+    files = payload["files"]
+    if not files:
+        raise ValueError("Report contains no tracks")
+    paths = set()
+    for item in files:
+        path = Path(item["path"]).resolve()
+        if not path.is_relative_to(source) or path == source or path in paths:
+            raise ValueError("Track paths must be unique and inside the release")
+        if item["status"] not in {"PASS", "QUARANTINE", "REJECTED"}:
+            raise ValueError("Invalid track status")
+        if not isinstance(item["integrity"]["ok"], bool):
+            raise ValueError("Invalid integrity result")
+        if not item["integrity"]["ok"]:
+            item["status"] = "REJECTED"
+        paths.add(path)
 
     with SessionLocal() as session:
         existing = session.scalar(
@@ -24,25 +39,21 @@ def import_report(report_path: Path) -> Release:
         )
 
         if existing is not None:
-            session.delete(existing)
+            # Keep release identity and file-operation history across reanalysis.
+            existing.tracks.clear()
             session.flush()
-
-        release = Release(
-            source_path=source_path,
-            title=source.name,
-            status=payload["status"],
-            analysed_at=payload.get("analysed_at"),
-            total_tracks=summary["total"],
-            pass_tracks=summary["pass"],
-            quarantine_tracks=summary["quarantine"],
-            rejected_tracks=summary["rejected"],
-        )
+        release = existing if existing is not None else Release(source_path=source_path, title=source.name, status="QUARANTINE")
+        release.analysed_at = payload.get("analysed_at")
+        release.total_tracks = len(files)
+        release.pass_tracks = sum(item["status"] == "PASS" for item in files)
+        release.quarantine_tracks = sum(item["status"] == "QUARANTINE" for item in files)
+        release.rejected_tracks = sum(item["status"] == "REJECTED" for item in files)
 
         session.add(release)
         session.flush()
 
-        for item in payload["files"]:
-            path = Path(item["path"])
+        for item in files:
+            path = Path(item["path"]).resolve()
 
             try:
                 display_path = str(path.relative_to(source))
@@ -70,8 +81,9 @@ def import_report(report_path: Path) -> Release:
                     else None
                 ),
             )
-            session.add(track)
+            release.tracks.append(track)
 
+        recalculate_release_status(release)
         session.commit()
         session.refresh(release)
         return release

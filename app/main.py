@@ -1,7 +1,7 @@
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -14,7 +14,9 @@ from sqlalchemy.orm import selectinload
 
 from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
-from app.models import AnalysisJob, AnalysisSource, Release, Track
+from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation
+from app.services.verdicts import recalculate_release_status
+from app.services.settings import workflow_settings
 from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
@@ -55,23 +57,6 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def recalculate_release_status(release: Release) -> None:
-    if any(
-        track.status == "REJECTED"
-        or track.human_review == "REJECTED"
-        for track in release.tracks
-    ):
-        release.status = "REJECTED"
-    elif any(
-        track.status == "QUARANTINE"
-        and track.human_review != "APPROVED"
-        for track in release.tracks
-    ):
-        release.status = "QUARANTINE"
-    else:
-        release.status = "PASS"
-
-
 def resolve_source_directory(source_id: int, relative_path: str) -> tuple[AnalysisSource, Path]:
     with SessionLocal() as session:
         source = session.get(AnalysisSource, source_id)
@@ -99,7 +84,7 @@ def safe_upload_path(filename: str) -> Path:
     normalized = filename.replace("\\", "/")
     candidate = PurePosixPath(normalized)
 
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if candidate.is_absolute() or PureWindowsPath(normalized).drive or ".." in candidate.parts or ":" in normalized or "\x00" in normalized:
         raise HTTPException(status_code=400, detail="Unsafe upload path")
 
     parts = tuple(
@@ -233,6 +218,10 @@ def analyses(request: Request):
             )
         ).all()
 
+        release_links = dict(session.execute(select(Release.source_path, Release.id)).all())
+        for path, release_id in session.execute(select(ReleaseOperation.source_path, ReleaseOperation.release_id).order_by(ReleaseOperation.id)):
+            release_links.setdefault(path, release_id)
+
         job_groups = {
             status: [
                 job for job in jobs
@@ -256,9 +245,48 @@ def analyses(request: Request):
             name="analyses.html",
             context={
                 "job_groups": job_groups,
+                "release_links": release_links,
                 "has_active_jobs": has_active_jobs,
             },
         )
+
+
+@app.get("/releases", response_class=HTMLResponse)
+def releases_page(request: Request, q: str = "", status: str = "", page: int = 1):
+    if status not in {"", "PASS", "QUARANTINE", "REJECTED"}:
+        raise HTTPException(status_code=400, detail="Invalid release status")
+    statement = select(Release)
+    if q.strip():
+        statement = statement.where(Release.title.icontains(q.strip(), autoescape=True))
+    if status:
+        statement = statement.where(Release.status == status)
+    with SessionLocal() as session:
+        total = session.scalar(select(func.count()).select_from(statement.subquery()))
+        pages = max(1, (total + 49) // 50)
+        page = min(max(1, page), pages)
+        releases = session.scalars(statement.order_by(Release.id.desc()).offset((page - 1) * 50).limit(50)).all()
+    return templates.TemplateResponse(request=request, name="releases.html", context={
+        "releases": releases, "query": q, "status": status, "page": page, "pages": pages, "total": total,
+    })
+
+
+@app.post("/analyses/{job_id}/retry")
+def retry_analysis(job_id: int):
+    with SessionLocal() as session:
+        job = session.get(AnalysisJob, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        if job.status != "FAILED":
+            raise HTTPException(status_code=409, detail="Only failed analyses can be retried")
+        if not Path(job.source_path).is_dir():
+            raise HTTPException(status_code=409, detail="Source directory no longer exists")
+        if session.scalar(select(AnalysisJob.id).where(AnalysisJob.source_path == job.source_path,
+                                                     AnalysisJob.status.in_({"QUEUED", "ANALYZING"}))):
+            raise HTTPException(status_code=409, detail="Analysis already queued")
+        job.status = "QUEUED"
+        job.error = None
+        session.commit()
+    return RedirectResponse("/analyses", status_code=303)
 
 
 @app.post("/analyses/clear/{status}")
@@ -399,6 +427,11 @@ def create_container_analysis(
         )
 
     with SessionLocal() as session:
+        if session.scalar(select(AnalysisJob.id).where(
+            AnalysisJob.source_path == str(source),
+            AnalysisJob.status.in_({"QUEUED", "ANALYZING"}),
+        )):
+            raise HTTPException(status_code=409, detail="This release is already queued or being analyzed")
         job = AnalysisJob(
             source_type=configured_source.kind,
             source_path=str(source),
@@ -469,11 +502,17 @@ async def create_upload_analysis(
     files: list[UploadFile] = File(...),
 ):
     accepted = []
+    seen_paths = set()
 
     for upload in files:
-        relative = safe_upload_path(upload.filename or "")
+        if not upload.filename:
+            continue
+        relative = safe_upload_path(upload.filename)
 
         if relative.suffix.lower() in ALLOWED_UPLOAD_EXTENSIONS:
+            if relative in seen_paths:
+                raise HTTPException(status_code=400, detail="Duplicate upload filename")
+            seen_paths.add(relative)
             accepted.append((upload, relative))
 
     if not any(
@@ -533,7 +572,7 @@ async def create_upload_analysis(
 
 @app.post("/analyses/report")
 async def upload_report(report: UploadFile = File(...)):
-    filename = Path(report.filename or "").name
+    filename = Path((report.filename or "").replace("\\", "/")).name
 
     if not filename.lower().endswith(".json"):
         raise HTTPException(
@@ -582,7 +621,7 @@ def release_detail(request: Request, release_id: int):
         return templates.TemplateResponse(
             request=request,
             name="release.html",
-            context={"release": release},
+            context={"release": release, "file_operations_enabled": workflow_settings()["enabled"]},
         )
 
 

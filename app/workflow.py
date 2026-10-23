@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.i18n import resolve_language
-from app.models import AnalysisSource, Release
+from app.models import AnalysisSource
 from app.presentation import configure_templates
 from app.services.file_workflow import (
     FileOperationError,
@@ -15,6 +15,7 @@ from app.services.file_workflow import (
     settings_snapshot,
 )
 from app.services.sources import SourceConfigurationError, add_source
+from app.services.settings import WorkflowConfigurationError, save_workflow_settings, workflow_settings
 
 
 router = APIRouter()
@@ -23,6 +24,10 @@ templates = configure_templates(Jinja2Templates(directory="app/templates"))
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
+    return render_settings(request)
+
+
+def render_settings(request: Request, *, error: str | None = None, values: dict | None = None):
     with SessionLocal() as session:
         sources = list(
             session.scalars(
@@ -34,11 +39,30 @@ def settings_page(request: Request):
         name="settings.html",
         context={
             "settings": settings_snapshot(),
+            "workflow": values if values is not None else workflow_settings(),
+            "error": error,
             "sources": sources,
             "language_preference": request.cookies.get("lv_language", "auto"),
             "effective_language": resolve_language(request),
         },
     )
+
+
+@router.post("/settings/workflow", response_class=HTMLResponse)
+def update_workflow(request: Request, enabled: bool = Form(False), policy: str = Form("manual"),
+                    movable_roots: str = Form(""), staging: str = Form(""),
+                    quarantine: str = Form(""), rejected: str = Form("")):
+    try:
+        save_workflow_settings(enabled=enabled, policy=policy, movable_roots=movable_roots,
+                               staging=staging, quarantine=quarantine, rejected=rejected)
+    except WorkflowConfigurationError as exc:
+        values = dict(enabled=enabled, auto_route=policy != "manual", route_nonpass=policy == "all",
+                      movable_roots=movable_roots.splitlines(), staging=staging,
+                      quarantine=quarantine, rejected=rejected)
+        response = render_settings(request, error=str(exc), values=values)
+        response.status_code = 400
+        return response
+    return RedirectResponse("/settings?saved=1#automation", status_code=303)
 
 
 @router.post("/settings/language")

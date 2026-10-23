@@ -27,7 +27,7 @@ def test_safe_upload_path_accepts_relative_paths(filename, expected):
 
 @pytest.mark.parametrize(
     "filename",
-    ["", ".", "../track.flac", "album/../../track.flac", "/etc/passwd"],
+    ["", ".", "../track.flac", "album/../../track.flac", "/etc/passwd", "C:/track.flac", "C:track.flac", "album/file:stream.flac"],
 )
 def test_safe_upload_path_rejects_unsafe_paths(filename):
     with pytest.raises(HTTPException):

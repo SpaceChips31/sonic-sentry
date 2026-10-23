@@ -7,23 +7,10 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.config import (
-    AUTO_ROUTE_RELEASES,
-    FILE_OPERATIONS_ENABLED,
-    MOVABLE_ROOTS,
-    QUARANTINE_ROOT,
-    REJECTED_ROOT,
-    STAGING_ROOT,
-)
 from app.database import SessionLocal
-from app.models import Release, ReleaseOperation, Track
-
-
-TARGET_ROOTS = {
-    "STAGING": STAGING_ROOT,
-    "QUARANTINE": QUARANTINE_ROOT,
-    "REJECTED": REJECTED_ROOT,
-}
+from app.models import AnalysisJob, Release, ReleaseOperation
+from app.services.settings import workflow_settings
+from app.services.verdicts import recalculate_release_status
 
 
 class FileOperationError(RuntimeError):
@@ -46,32 +33,38 @@ def is_within(path: Path, roots: tuple[Path, ...]) -> bool:
     return False
 
 
-def configured_target(kind: str) -> Path:
-    target = TARGET_ROOTS.get(kind)
-    if target is None:
+def configured_target(kind: str, settings: dict) -> Path:
+    target = settings.get(kind.lower())
+    if kind not in {"STAGING", "QUARANTINE", "REJECTED"} or not target:
         raise FileOperationError(f"{kind.lower()} destination is not configured")
-    return target
+    return Path(target).resolve()
 
 
-def validate_source(path: Path) -> Path:
+def validate_source(path: Path, settings: dict) -> Path:
     source = path.resolve()
-    if not FILE_OPERATIONS_ENABLED:
+    if not settings["enabled"]:
         raise FileOperationError("file operations are disabled")
     if not source.is_dir():
         raise FileOperationError(f"source directory does not exist: {source}")
-    if not is_within(source, MOVABLE_ROOTS):
+    roots = tuple(Path(p).resolve() for p in settings["movable_roots"])
+    protected = roots + tuple(Path(settings[k]).resolve() for k in ("staging", "quarantine", "rejected") if settings[k])
+    if any(root.is_relative_to(source) for root in protected):
+        raise FileOperationError("cannot move or delete a configured root or its parent")
+    if not is_within(source, roots):
         raise FileOperationError(
             "source is outside LOSSLESS_MOVABLE_ROOTS"
         )
     return source
 
 
-def destination_for(source: Path, kind: str) -> Path:
-    root = configured_target(kind)
+def destination_for(source: Path, kind: str, settings: dict) -> Path:
+    root = configured_target(kind, settings)
+    if root.is_relative_to(source):
+        raise FileOperationError("destination cannot be inside the source album")
     root.mkdir(parents=True, exist_ok=True)
     destination = (root / source.name).resolve()
 
-    if destination == source:
+    if destination == source or source.is_relative_to(destination):
         raise FileOperationError("release is already in that destination")
     if destination.exists():
         raise FileOperationError(
@@ -90,9 +83,24 @@ def update_paths(
         old_path = Path(track.path)
         try:
             relative = old_path.relative_to(source)
-        except ValueError:
-            relative = Path(track.display_path)
+        except ValueError as exc:
+            raise FileOperationError("track path is outside the album directory") from exc
         track.path = str(destination / relative)
+
+
+def lock_file_operations(session) -> None:
+    # Web and worker are separate processes. Serialize file changes in SQLite.
+    if session.bind.dialect.name == "sqlite":
+        session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+
+
+def check_active_jobs(session, source: Path, current_job_id: int | None = None) -> None:
+    statement = select(AnalysisJob.source_path).where(AnalysisJob.status.in_({"QUEUED", "ANALYZING"}))
+    if current_job_id is not None:
+        statement = statement.where(AnalysisJob.id != current_job_id)
+    queued = session.scalars(statement)
+    if any(Path(p).resolve().is_relative_to(source) or source.is_relative_to(Path(p).resolve()) for p in queued):
+        raise FileOperationError("album has an active analysis; wait for it to finish")
 
 
 def move_release(
@@ -100,9 +108,12 @@ def move_release(
     target_kind: str,
     *,
     manual_pass: bool = False,
+    current_job_id: int | None = None,
 ) -> Path:
     normalized = target_kind.upper()
+    settings = workflow_settings()
     with SessionLocal() as session:
+        lock_file_operations(session)
         release = session.scalar(
             select(Release)
             .where(Release.id == release_id)
@@ -111,17 +122,28 @@ def move_release(
         if release is None:
             raise FileOperationError("release not found")
 
-        source = validate_source(Path(release.source_path))
-        destination = destination_for(source, normalized)
+        source = validate_source(Path(release.source_path), settings)
+        check_active_jobs(session, source, current_job_id)
+        destination = destination_for(source, normalized, settings)
 
         if manual_pass:
+            if normalized != "STAGING" or not release.tracks or any(
+                not track.integrity_ok or track.status == "REJECTED" for track in release.tracks
+            ):
+                raise FileOperationError("an album with integrity failures cannot be approved")
             for track in release.tracks:
                 if track.status == "QUARANTINE":
                     track.human_review = "APPROVED"
-            release.status = "PASS"
+            recalculate_release_status(release)
 
-        shutil.move(str(source), str(destination))
+        if normalized == "STAGING" and release.status != "PASS":
+            raise FileOperationError("only approved albums can be sent to staging")
+
         update_paths(release, source, destination)
+        try:
+            shutil.move(str(source), str(destination))
+        except OSError as exc:
+            raise FileOperationError(f"could not move album: {exc}") from exc
         session.add(
             ReleaseOperation(
                 release_id=release.id,
@@ -135,20 +157,31 @@ def move_release(
                 created_at=utc_now(),
             )
         )
-        session.commit()
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+            shutil.move(str(destination), str(source))
+            raise
         return destination
 
 
 def delete_release_files(release_id: int) -> None:
+    settings = workflow_settings()
     with SessionLocal() as session:
+        lock_file_operations(session)
         release = session.scalar(
             select(Release).where(Release.id == release_id)
         )
         if release is None:
             raise FileOperationError("release not found")
 
-        source = validate_source(Path(release.source_path))
-        shutil.rmtree(source)
+        source = validate_source(Path(release.source_path), settings)
+        check_active_jobs(session, source)
+        try:
+            shutil.rmtree(source)
+        except OSError as exc:
+            raise FileOperationError(f"could not delete album: {exc}") from exc
         session.add(
             ReleaseOperation(
                 release_id=release.id,
@@ -161,14 +194,17 @@ def delete_release_files(release_id: int) -> None:
         session.commit()
 
 
-def auto_route_release(release_id: int) -> Path | None:
-    if not FILE_OPERATIONS_ENABLED or not AUTO_ROUTE_RELEASES:
+def auto_route_release(release_id: int, *, current_job_id: int | None = None) -> Path | None:
+    settings = workflow_settings()
+    if not settings["enabled"] or not settings["auto_route"]:
         return None
 
     with SessionLocal() as session:
         release = session.get(Release, release_id)
         if release is None:
             raise FileOperationError("release not found")
+        if release.status != "PASS" and not settings["route_nonpass"]:
+            return None
         target = {
             "PASS": "STAGING",
             "QUARANTINE": "QUARANTINE",
@@ -177,17 +213,19 @@ def auto_route_release(release_id: int) -> Path | None:
 
     if target is None:
         raise FileOperationError("release has no routable verdict")
-    return move_release(release_id, target)
+    return move_release(release_id, target, current_job_id=current_job_id)
 
 
 def settings_snapshot() -> dict:
+    settings = workflow_settings()
     def describe(path: Path | None) -> dict:
-        if path is None:
+        if not path:
             return {
                 "path": "Not configured",
                 "exists": False,
                 "writable": False,
             }
+        path = Path(path)
         return {
             "path": str(path),
             "exists": path.is_dir(),
@@ -195,20 +233,20 @@ def settings_snapshot() -> dict:
         }
 
     return {
-        "enabled": FILE_OPERATIONS_ENABLED,
-        "auto_route": AUTO_ROUTE_RELEASES,
-        "movable_roots": [describe(path) for path in MOVABLE_ROOTS],
-        "staging": describe(STAGING_ROOT),
-        "quarantine": describe(QUARANTINE_ROOT),
-        "rejected": describe(REJECTED_ROOT),
+        "enabled": settings["enabled"],
+        "auto_route": settings["auto_route"],
+        "movable_roots": [describe(path) for path in settings["movable_roots"]],
+        "staging": describe(settings["staging"]),
+        "quarantine": describe(settings["quarantine"]),
+        "rejected": describe(settings["rejected"]),
     }
 
 
 def os_access_writable(path: Path) -> bool:
+    import tempfile
     try:
-        probe = path / ".lossless-validator-write-test"
-        probe.touch(exist_ok=False)
-        probe.unlink()
+        with tempfile.TemporaryFile(dir=path):
+            pass
         return True
     except OSError:
         return False

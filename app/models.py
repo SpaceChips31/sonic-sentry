@@ -89,3 +89,10 @@ class AnalysisSource(Base):
     path: Mapped[str] = mapped_column(String, unique=True, index=True)
     kind: Mapped[str] = mapped_column(String, default="FILESYSTEM")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
+class WorkflowSettings(Base):
+    __tablename__ = "workflow_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)

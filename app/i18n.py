@@ -4,6 +4,22 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Configure file operations": "Configura le operazioni sui file",
+    "Choose which albums to route without confirmation. Approved albums go to Picard; other results stay for review or are routed by verdict. Files are never deleted automatically.": "Scegli quali album inoltrare senza conferme. I conformi vanno a Picard; gli altri restano da verificare oppure vengono separati secondo il verdetto. Nessun file viene eliminato automaticamente.",
+    "Workflow settings saved.": "Impostazioni del flusso salvate.",
+    "Automatically route approved albums only": "Inoltra automaticamente solo gli album conformi",
+    "Automatically route every verdict": "Smista automaticamente tutti gli esiti",
+    "One absolute directory per line. Root folders themselves are protected.": "Una directory assoluta per riga. Le cartelle radice sono protette da spostamento ed eliminazione.",
+    "Use existing writable container paths. Changes are stored in the database and apply to future moves without a restart. Docker variables provide the initial defaults.": "Usa percorsi già montati e scrivibili nel container. Le modifiche sono salvate nel database e valgono per i prossimi spostamenti, senza riavvio. Le variabili Docker forniscono i valori iniziali.",
+    "Save workflow": "Salva flusso",
+    "Search releases": "Cerca album",
+    "No matching releases.": "Nessun album corrispondente.",
+    "Pages": "Pagine",
+    "Previous": "Precedente",
+    "Next": "Successiva",
+    "Retry": "Riprova",
+    "Open result": "Apri risultato",
+
     "Main navigation": "Navigazione principale",
     "Dashboard": "Dashboard",
     "Queue": "Coda",
