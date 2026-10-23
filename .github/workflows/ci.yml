@@ -32,7 +32,9 @@ jobs:
       - name: Build container
         run: |
           docker build \
-            --build-arg VERSION=0.1.0-dev \
+            --build-arg VERSION=0.2.0-dev \
             --build-arg VCS_REF="$GITHUB_SHA" \
             --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --tag sonic-sentry:ci .
+      - name: Verify real FLAC analysis and file routing
+        run: docker run --rm -i sonic-sentry:ci python - < scripts/smoke-container.py

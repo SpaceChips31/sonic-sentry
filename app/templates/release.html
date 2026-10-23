@@ -11,6 +11,7 @@
 </section>
 <section class="panel release-actions"><div><p class="eyebrow">{{ _('Album workflow') }}</p><h2>{{ _('File actions') }}</h2><p>{{ _('File actions help') }}</p></div>
 {% if release.operations and release.operations[0].action == 'DELETE' %}<span class="badge rejected">{{ _('Files deleted') }}</span>
+{% elif pending_transfer %}<a class="button secondary" href="/activity">{{ _('View unfinished transfer') }}</a>
 {% elif not file_operations_enabled %}<a class="button secondary" href="/settings#automation">{{ _('Configure file operations') }}</a>
 {% else %}<form method="post" action="/releases/{{ release.id }}/files">
 <button class="button success" name="action" value="manual-pass" type="submit" onclick='return confirm({{ _("Manual pass confirm")|tojson }})'>{{ _('Manual pass → staging') }}</button>

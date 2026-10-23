@@ -658,3 +658,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
     .main-nav { flex-wrap: wrap; }
     .workflow-form button { width: 100%; }
 }
+
+.bulk-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+.bulk-actions select { padding: 7px; background: var(--surface-inset); color: var(--text); }
+.bulk-actions small, .queue-table small { display: block; color: var(--muted); }
+.queue-table progress { width: 100%; max-width: 160px; accent-color: var(--accent); }
+.history-clear { margin: 8px 12px; }
+.badge.routing { background: #274b66; color: #a3d7ff; }
+.badge.cancelled { background: #41474d; color: #d5d8dc; }
+.activity-row { padding: 14px; border-bottom: 1px solid var(--border-light); }
+.activity-row code { display: block; overflow-wrap: anywhere; margin: 6px 0; }
+@media (max-width: 950px) { .topbar { height: auto; flex-wrap: wrap; } .main-nav { flex-wrap: wrap; } }
+
+.activity-panel { margin-bottom: 18px; }
+.activity-panel > h2 { padding: 16px; margin: 0; border-bottom: 1px solid var(--border-light); }
+button:disabled { opacity: .45; cursor: not-allowed; }

@@ -54,8 +54,8 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.1.2`), the minor release
-(`0.1`), and `latest`. Production deployments should prefer the exact
+Available release tags include the exact version (`0.2.0`), the minor release
+(`0.2`), and `latest`. Production deployments should prefer the exact
 version.
 
 For a private fork or private package, authenticate before pulling:
@@ -110,6 +110,54 @@ The **Releases** page provides search, status filters and pagination. Failed
 analyses can be retried from the queue. Reanalysis preserves the release link
 and file-operation history, replaces track results and resets human reviews.
 
+## Automatic ingestion and recovery (0.2)
+
+Enable **Watch folder** on each desired source in Settings. Monitoring starts
+only after you opt in for that source. The worker checks sources between jobs;
+the scan interval defaults to 60 seconds and the stability wait to 300 seconds.
+Both values are editable without a restart. An album must remain unchanged
+across observations for the full wait, with no known partial-download files.
+Source roots, hidden working directories and all configured output folders are
+excluded. Organize files into album subdirectories below the watched root.
+
+This is a filesystem readiness heuristic, not a download-client completion
+notification. Files changing during analysis are rejected for retry, and never
+routed. For clients that preallocate files or pause downloads for long periods,
+watch their completed-download directory and increase the stability wait.
+
+Exact FLAC-file hashes prevent repeated automatic analyses of identical sets of
+files, even if names differ. Different tags, encodings or masters are not treated
+as identical. Duplicates stay where they are; Activity links to the existing
+result. Failed or cancelled observations require an explicit retry rather than
+retrying forever. Manual analysis remains available for intentional reanalysis.
+
+File moves now use a persistent journal: copy into a hidden temporary directory,
+verify every file with SHA-256, publish without replacing an existing destination,
+update the release and audit entry, then remove verified originals. This requires
+free space for a complete extra album copy and additional disk I/O, including
+when source and destination share a filesystem. Interrupted transfers resume
+when the worker starts. Changed originals or ambiguous destinations stop for
+operator review; the remaining files are preserved.
+
+Use **Activity** to inspect transfers and ingestion. **Verify and resume** retries
+a stopped transfer. **Close and keep all files** explicitly closes an unresolved
+transfer once the release's referenced files exist, preserving all remaining
+source, destination and temporary files; any retained temporary directory is
+shown for manual inspection. No automatic cleanup deletes those preserved files.
+
+The queue shows completed/total tracks and offers cancellation and retry.
+Cancellation stops the validator and its child processes; a file transfer that
+has already started is allowed to finish. Release links are stored explicitly.
+Clearing terminal queue history hides entries while preserving ingestion links.
+Bulk review on the Releases page changes human decisions without moving files.
+
+Existing SQLite databases are upgraded automatically with additive migrations;
+back up `data/` before upgrading. Keep web and worker on the same version and
+run one worker per database. An OS lock prevents a second worker from reclaiming
+another worker's live analyses. Do not downgrade an upgraded deployment while
+transfers remain unfinished. CI also exercises a real FLAC analysis and verified
+routing inside the built container.
+
 ## Updating
 
 Set the desired version in `.env`, then run:
@@ -119,11 +167,11 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.1.2:
+For SonicSentry 0.2.0:
 
 ```env
 LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
-LOSSLESS_VALIDATOR_VERSION=0.1.2
+LOSSLESS_VALIDATOR_VERSION=0.2.0
 ```
 
 ## Local development
@@ -136,9 +184,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.1.2` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.2.0` runs the GitHub Actions
 publication workflow. It builds the image once and publishes the corresponding
-`0.1.2`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
+`0.2.0`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
 
 ## Exit statuses
 

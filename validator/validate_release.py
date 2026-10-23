@@ -28,7 +28,7 @@ def run_flac_test(path: Path):
 def run_forensics(path: Path):
     proc = subprocess.run(
         [
-            "python",
+            sys.executable,
             "/opt/audio-forensic/audio_forensic.py",
             "--json",
             str(path),
@@ -112,6 +112,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("release", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--progress", type=Path)
     parser.add_argument("--json-stdout", action="store_true")
     args = parser.parse_args()
 
@@ -140,6 +141,13 @@ def main():
 
     release_status = "PASS"
 
+    def write_progress(completed):
+        if args.progress:
+            temporary = args.progress.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"completed": completed, "total": len(files)}), encoding="utf-8")
+            temporary.replace(args.progress)
+
+    write_progress(0)
     for path in files:
         print(f"Checking: {path.name}", file=sys.stderr)
 
@@ -169,6 +177,7 @@ def main():
             item["forensics"] = forensic
 
         report["files"].append(item)
+        write_progress(len(report["files"]))
 
     report["status"] = release_status
     report["summary"] = {

@@ -1,7 +1,8 @@
 import argparse
 from pathlib import Path
 
-from app.database import Base, engine
+from app.database import engine
+from app.migrations import initialize_database
 from app.services.importer import import_report
 
 
@@ -10,7 +11,7 @@ def main():
     parser.add_argument("report", type=Path)
     args = parser.parse_args()
 
-    Base.metadata.create_all(bind=engine)
+    initialize_database(engine)
     release = import_report(args.report)
 
     print(

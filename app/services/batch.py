@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 
 
@@ -15,14 +16,26 @@ class BatchDiscoveryError(ValueError):
     pass
 
 
-def discover_releases(root: Path) -> list[Path]:
+def discover_releases(root: Path, *, excluded_roots: tuple[Path, ...] = ()) -> list[Path]:
     """Find album roots below *root*, collapsing conventional disc folders."""
     root = root.resolve()
     candidates: set[Path] = set()
 
-    for audio_file in root.rglob("*"):
-        if not audio_file.is_file() or audio_file.suffix.lower() != ".flac":
-            continue
+    def fail(error):
+        raise error
+    def walk_audio():
+        for current, directories, filenames in os.walk(root, followlinks=False, onerror=fail):
+            current = Path(current)
+            if any(current.is_relative_to(excluded) for excluded in excluded_roots):
+                directories[:] = []
+                continue
+            directories[:] = [name for name in directories if not name.startswith('.')
+                               and not (current / name).is_symlink()
+                               and not (hasattr(current / name, 'is_junction') and (current / name).is_junction())]
+            for name in filenames:
+                if Path(name).suffix.lower() == '.flac' and not (current / name).is_symlink():
+                    yield current / name
+    for audio_file in walk_audio():
 
         audio_directory = audio_file.parent.resolve()
         if audio_directory != root and _DISC_DIRECTORY.match(audio_directory.name):
