@@ -35,3 +35,15 @@ def test_digital_media_directories_are_grouped(tmp_path):
     touch_flac(album / "Digital Media 02" / "02.flac")
 
     assert discover_releases(tmp_path) == [album]
+
+
+def test_selected_disc_is_a_release(tmp_path):
+    disc = tmp_path / "CD01"
+    touch_flac(disc / "track.flac")
+    assert discover_releases(disc) == [disc]
+
+
+def test_album_starting_with_disc_number_is_not_collapsed(tmp_path):
+    album = tmp_path / "CD01 Greatest Hits"
+    touch_flac(album / "track.flac")
+    assert discover_releases(tmp_path) == [album]

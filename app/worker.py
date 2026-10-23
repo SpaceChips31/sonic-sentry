@@ -1,16 +1,17 @@
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 from sqlalchemy import select, update
 
-from app.config import REPORT_ROOT
+from app.config import PROJECT_ROOT, REPORT_ROOT
 from app.database import Base, SessionLocal, engine
 from app.models import AnalysisJob
 from app.services.importer import import_report
-from app.services.file_workflow import auto_route_release
+from app.services.file_workflow import FileOperationError, auto_route_release
 
-VALIDATOR = Path("/app/validator/validate_release.py")
+VALIDATOR = PROJECT_ROOT / "validator" / "validate_release.py"
 EXPECTED_EXIT_CODES = {0, 10, 20}
 
 
@@ -41,9 +42,12 @@ def claim_job():
         if job is None:
             return None
 
-        job.status = "ANALYZING"
-        job.error = None
+        result = session.execute(update(AnalysisJob).where(
+            AnalysisJob.id == job.id, AnalysisJob.status == "QUEUED"
+        ).values(status="ANALYZING", error=None))
         session.commit()
+        if result.rowcount != 1:
+            return None
 
         return {
             "id": job.id,
@@ -67,9 +71,10 @@ def process_job(job):
     report = REPORT_ROOT / f"job-{job_id}.json"
 
     try:
+        report.unlink(missing_ok=True)
         proc = subprocess.run(
             [
-                "python",
+                sys.executable,
                 str(VALIDATOR),
                 "--report",
                 str(report),
@@ -92,7 +97,12 @@ def process_job(job):
 
         release = import_report(report)
 
-        destination = auto_route_release(release.id)
+        routing_error = None
+        try:
+            destination = auto_route_release(release.id, current_job_id=job_id)
+        except (FileOperationError, OSError) as exc:
+            destination = None
+            routing_error = f"Analysis completed; automatic routing needs attention: {exc}"
 
         print(
             f"Job {job_id} completed: "
@@ -105,7 +115,7 @@ def process_job(job):
             flush=True,
         )
 
-        finish_job(job_id, "COMPLETED")
+        finish_job(job_id, "COMPLETED", routing_error)
 
     except Exception as exc:
         print(f"Job {job_id} failed: {exc}", flush=True)

@@ -632,3 +632,29 @@ input[type="file"] {
 @media (max-width: 700px) {
     .settings-advanced > summary { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
+
+/* Workflow controls and library browsing */
+.main-nav a[aria-current="page"] { color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
+.workflow-form { display: grid; gap: 14px; max-width: 850px; }
+.workflow-form label, .release-filter label { display: grid; gap: 6px; min-width: 0; }
+.workflow-form input:not([type="checkbox"]), .workflow-form textarea, .workflow-form select,
+.release-filter input, .release-filter select {
+    width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #626970;
+    border-radius: 4px; background: #202326; color: var(--text); font: inherit;
+}
+.workflow-form .checkbox-label { display: flex; align-items: center; }
+.workflow-form small { color: var(--muted); }
+.workflow-form button { justify-self: start; }
+.notice { padding: 12px; border-left: 3px solid var(--accent); background: #202b26; }
+.notice.error { background: #3b2227; border-color: #ef8792; }
+.release-filter { display: flex; align-items: end; gap: 12px; padding: 16px; margin-bottom: 16px; }
+.release-filter label:first-child { flex: 1; }
+.album-path { display: block; color: var(--muted); margin-top: 5px; overflow-wrap: anywhere; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 20px 0; }
+.panel:has(> table), .table-scroll { overflow-x: auto; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 700px) {
+    .release-filter { flex-direction: column; align-items: stretch; }
+    .main-nav { flex-wrap: wrap; }
+    .workflow-form button { width: 100%; }
+}

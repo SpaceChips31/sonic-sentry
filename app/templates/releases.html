@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Releases') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">{{ _('Library history') }}</p><h1>{{ _('Releases') }}</h1><p>{{ total }} {{ _('total') }}</p></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
+<form class="release-filter panel" method="get">
+  <label>{{ _('Search releases') }}<input type="search" name="q" value="{{ query }}"></label>
+  <label>{{ _('Final status') }}<select name="status"><option value="">{{ _('All releases') }}</option>{% for value in ['PASS', 'QUARANTINE', 'REJECTED'] %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|human_status }}</option>{% endfor %}</select></label>
+  <button class="button secondary" type="submit">{{ _('Filter') }}</button>
+</form>
+<section class="panel table-scroll">
+{% if releases %}<table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Tracks') }}</th><th>{{ _('Final status') }}</th></tr></thead><tbody>
+{% for release in releases %}<tr><td><a href="/releases/{{ release.id }}">{{ release.title }}</a><small class="album-path">{{ release.source_path }}</small></td><td>{{ release.total_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
+</tbody></table>{% else %}<div class="empty"><p>{{ _('No matching releases.') }}</p><a href="/analyses/new">{{ _('New analysis') }}</a></div>{% endif %}
+</section>
+<nav class="pagination" aria-label="{{ _('Pages') }}">
+{% if page > 1 %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&page={{ page-1 }}">← {{ _('Previous') }}</a>{% endif %}
+<span>{{ page }} / {{ pages }}</span>
+{% if page < pages %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&page={{ page+1 }}">{{ _('Next') }} →</a>{% endif %}
+</nav>
+{% endblock %}

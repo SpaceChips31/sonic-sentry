@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% macro job_table(jobs) %}<div class="queue-table"><table><thead><tr><th>{{ _('Source') }}</th><th>{{ _('Release') }}</th><th>{{ _('Created') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
-{% for job in jobs %}<tr><td>{{ job.source_type }}</td><td title="{{ job.source_path }}">{{ job.display_name }}</td><td>{{ job.created_at }}</td><td><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span></td></tr>{% if job.error %}<tr class="job-error-row"><td colspan="4">{{ job.error }}</td></tr>{% endif %}{% endfor %}
+{% for job in jobs %}<tr><td>{{ job.source_type }}</td><td title="{{ job.source_path }}">{% if release_links.get(job.source_path) %}<a href="/releases/{{ release_links[job.source_path] }}">{{ job.display_name }}</a>{% else %}{{ job.display_name }}{% endif %}</td><td>{{ job.created_at }}</td><td><span class="badge {{ job.status|lower }}">{{ _(job.status.title()) }}</span>{% if job.status == 'FAILED' %}<form method="post" action="/analyses/{{ job.id }}/retry"><button class="button secondary" type="submit">{{ _('Retry') }}</button></form>{% endif %}</td></tr>{% if job.error %}<tr class="job-error-row"><td colspan="4">{{ job.error }}</td></tr>{% endif %}{% endfor %}
 </tbody></table></div>{% endmacro %}
 {% block title %}{{ _('Analysis queue') }} · {{ app_name }}{% endblock %}
 {% block content %}

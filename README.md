@@ -54,7 +54,7 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.1.1`), the minor release
+Available release tags include the exact version (`0.1.2`), the minor release
 (`0.1`), and `latest`. Production deployments should prefer the exact
 version.
 
@@ -76,6 +76,40 @@ Back up these directories:
 
 The music library remains outside the container under `MEDIA_ROOT`.
 
+## Workflow settings and automatic hand-off
+
+Open **Settings > Album destinations and automation** to authorize source
+folders, select destinations, and enable album moves. Paths are absolute paths
+inside the container, must already exist, and must be writable by its UID/GID.
+Use one authorized source folder per line. The source roots themselves cannot
+be moved or deleted. Destination folders must be separate from one another.
+Quarantine/rejected destinations may also be authorized source roots so their
+albums can later be reviewed and moved to staging.
+
+Choose one routing policy:
+
+- **Manual**: analysis records results and leaves files in place.
+- **Approved albums only**: conforming albums go directly to Picard staging
+  without a confirmation; uncertain and rejected albums stay in place.
+- **Every verdict**: conforming albums go to staging, uncertain albums to
+  quarantine, and rejected albums to the rejected folder.
+
+Automation runs after worker analyses, including queued uploads and batches.
+Importing an existing JSON report does not move files. No policy automatically
+deletes files or approves integrity failures. Existing destinations are never
+overwritten. Routing failures appear as warnings on completed analyses; the
+analysis result remains available from the queue and the release library.
+
+Settings are stored in the database under `data/`, shared immediately with the
+worker and preserved after restarts. Environment variables are the defaults
+until settings are saved in the UI; saved values then take precedence. Disable
+automatic routing in Settings to stop subsequent hand-offs. An operation already
+in progress is allowed to finish.
+
+The **Releases** page provides search, status filters and pagination. Failed
+analyses can be retried from the queue. Reanalysis preserves the release link
+and file-operation history, replaces track results and resets human reviews.
+
 ## Updating
 
 Set the desired version in `.env`, then run:
@@ -85,11 +119,11 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.1.1:
+For SonicSentry 0.1.2:
 
 ```env
 LOSSLESS_VALIDATOR_IMAGE=ghcr.io/spacechips31/sonic-sentry
-LOSSLESS_VALIDATOR_VERSION=0.1.1
+LOSSLESS_VALIDATOR_VERSION=0.1.2
 ```
 
 ## Local development
@@ -102,9 +136,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.1.1` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.1.2` runs the GitHub Actions
 publication workflow. It builds the image once and publishes the corresponding
-`0.1.1`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
+`0.1.2`, `0.1`, and `latest` tags to GHCR. Release tags must not be reused.
 
 ## Exit statuses
 

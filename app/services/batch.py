@@ -6,7 +6,7 @@ from pathlib import Path
 
 MAX_BATCH_RELEASES = 500
 _DISC_DIRECTORY = re.compile(
-    r"^(?:cd|disc|disk|digital[ ._-]*media|side)[ ._-]*[0-9]+",
+    r"^(?:cd|disc|disk|digital[ ._-]*media|side)[ ._-]*[0-9]+$",
     re.IGNORECASE,
 )
 
@@ -25,7 +25,7 @@ def discover_releases(root: Path) -> list[Path]:
             continue
 
         audio_directory = audio_file.parent.resolve()
-        if _DISC_DIRECTORY.match(audio_directory.name):
+        if audio_directory != root and _DISC_DIRECTORY.match(audio_directory.name):
             candidate = audio_directory.parent
         else:
             candidate = audio_directory

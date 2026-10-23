@@ -6,7 +6,7 @@
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml">
     <link rel="stylesheet" href="/static/app.css?v=3">
-    <link rel="stylesheet" href="/static/desktop.css?v=9">
+    <link rel="stylesheet" href="/static/desktop.css?v=10">
 </head>
 <body>
 <header class="topbar">
@@ -14,11 +14,20 @@
     <span class="version">v{{ app_version }}</span>
     <nav class="main-nav" aria-label="{{ _('Main navigation') }}">
         <a href="/">{{ _('Dashboard') }}</a>
+        <a href="/releases">{{ _('Releases') }}</a>
         <a href="/analyses">{{ _('Queue') }}</a>
         <a href="/settings">{{ _('Settings') }}</a>
         <a class="nav-primary" href="/analyses/new">{{ _('New analysis') }}</a>
     </nav>
 </header>
 <main class="container">{% block content %}{% endblock %}</main>
+<script>
+document.querySelectorAll('.main-nav a').forEach(link => {
+  const path = location.pathname;
+  const active = link.pathname === '/' ? path === '/' :
+    link.pathname === '/analyses' ? path === '/analyses' : path.startsWith(link.pathname);
+  if (active) link.setAttribute('aria-current', 'page');
+});
+</script>
 </body>
 </html>
