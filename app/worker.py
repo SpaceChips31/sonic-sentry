@@ -241,13 +241,13 @@ def scan_loop():
 
 def main():
     global HEARTBEAT
-    initialize_database(engine)
     STOP.clear()
     def stopping(*args):
         STOP.set()
     signal.signal(signal.SIGTERM, stopping)
     signal.signal(signal.SIGINT, stopping)
     with process_lock("worker"), Heartbeat() as heartbeat:
+        initialize_database(engine)
         HEARTBEAT = heartbeat
         phase("RECOVERING")
         recover_transfers()

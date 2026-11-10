@@ -33,8 +33,8 @@ from app.security import security_middleware, check_csrf, require_admin_configur
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.services.locks import process_lock
-    initialize_database(engine)
     with process_lock("web"):
+        initialize_database(engine)
         seed_analysis_sources()
         require_admin_configured()
         yield
