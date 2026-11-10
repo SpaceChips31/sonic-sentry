@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
+from client import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker, selectinload
 
@@ -166,7 +166,7 @@ def test_manual_deletion_records_history_without_deleting_results(setup):
     assert not (setup.inbox / "Album").exists()
     with setup.db() as session:
         assert session.get(Release, release.id) is not None
-        assert session.scalar(select(ReleaseOperation)).action == "DELETE"
+        assert session.scalar(select(ReleaseOperation)).action == "MOVE_TO_TRASH"
 
 
 def test_reimport_preserves_release_identity_and_audit(setup):

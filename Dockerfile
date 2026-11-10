@@ -14,7 +14,7 @@ RUN python -m pip wheel \
 
 FROM python:3.13-slim
 
-ARG VERSION=0.2.0
+ARG VERSION=0.3.0
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
@@ -46,6 +46,7 @@ COPY vendor/audio-forensic/audio_forensic.py \
 WORKDIR /app
 
 COPY app/ /app/app/
+RUN python -c "import json,os; from pathlib import Path; Path('/app/app/build.json').write_text(json.dumps({'version':os.environ['VERSION'],'revision':os.environ['VCS_REF'],'built_at':os.environ['BUILD_DATE']}))"
 COPY validator/ /app/validator/
 COPY LICENSE THIRD_PARTY_NOTICES.md /licenses/
 COPY vendor/audio-forensic/LICENSE /licenses/audio-forensic-LICENSE
@@ -56,7 +57,6 @@ RUN mkdir -p /app/data /app/reports /app/uploads \
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    LOSSLESS_VALIDATOR_VERSION="${VERSION}" \
     LOSSLESS_VALIDATOR_DATA_DIR=/app/data \
     LOSSLESS_REPORT_ROOT=/app/reports \
     LOSSLESS_UPLOAD_ROOT=/app/uploads \
@@ -67,6 +67,6 @@ USER validator
 EXPOSE 8090
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)"]
+    CMD ["python", "-m", "app.health"]
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8090"]

@@ -1,18 +1,13 @@
+x-build: &build
+  context: .
+  args:
+    VERSION: "0.3.0-dev"
+    VCS_REF: dev
+    BUILD_DATE: local
 services:
   web:
-    build:
-      context: .
-      args:
-        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.1.0-dev}"
-        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
-        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
-    image: spacechips/sonic-sentry:dev
-
+    build: *build
+    image: ghcr.io/spacechips31/sonic-sentry:dev
   worker:
-    build:
-      context: .
-      args:
-        VERSION: "${LOSSLESS_VALIDATOR_VERSION:-0.1.0-dev}"
-        VCS_REF: "${LOSSLESS_VALIDATOR_VCS_REF:-dev}"
-        BUILD_DATE: "${LOSSLESS_VALIDATOR_BUILD_DATE:-local}"
-    image: spacechips/sonic-sentry:dev
+    build: *build
+    image: ghcr.io/spacechips31/sonic-sentry:dev

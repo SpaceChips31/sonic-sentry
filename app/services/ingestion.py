@@ -18,7 +18,7 @@ MAX_ENQUEUE_PER_SCAN = 25
 def scan_sources(*, now: float | None = None) -> int:
     now = time.time() if now is None else now
     settings = workflow_settings()
-    excluded = tuple(Path(settings[key]).resolve() for key in ("staging", "quarantine", "rejected") if settings[key])
+    excluded = tuple(Path(settings[key]).resolve() for key in ("staging", "quarantine", "rejected", "trash") if settings[key])
     with SessionLocal() as session:
         sources = list(session.scalars(select(AnalysisSource).where(
             AnalysisSource.enabled.is_(True), AnalysisSource.watch_enabled.is_(True))))

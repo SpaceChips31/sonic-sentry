@@ -55,4 +55,34 @@ with tempfile.TemporaryDirectory() as temporary:
         assert graph.is_relative_to(root / "reports") and graph.is_file()
         assert not album.exists()
         print(f"Container smoke test passed: job #{job_id}, release {release.status}")
+    from app.services.file_workflow import delete_release_files
+    from app.services.trash import restore_trash
+    from app.models import TrashEntry
+    from app.maintenance import export_backup
+    release_id = release.id
+    original = Path(release.source_path)
+    delete_release_files(release_id)
+    with SessionLocal() as session:
+        entry = session.scalar(select(TrashEntry))
+        assert entry.state == "TRASHED" and not original.exists()
+        entry_id = entry.id
+    restore_trash(entry_id)
+    assert (original / "track.flac").is_file()
+    export_backup(root / "metadata.zip")
+    import time
+    worker = subprocess.Popen(["python", "-m", "app.worker"])
+    try:
+        heartbeat = root / "data" / "worker-health.json"
+        for _ in range(100):
+            if heartbeat.exists() and json.loads(heartbeat.read_text()).get("phase") == "IDLE":
+                break
+            assert worker.poll() is None, "Worker exited during startup"
+            time.sleep(0.1)
+        else:
+            raise AssertionError("Worker heartbeat did not become ready")
+        subprocess.run(["python", "-m", "app.health"], check=True)
+    finally:
+        worker.terminate()
+        worker.wait(timeout=20)
+    print("Container trash, restore, backup and worker health checks passed")
     engine.dispose()

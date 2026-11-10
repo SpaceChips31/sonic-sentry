@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
-from app.models import AnalysisJob, Release, ReleaseOperation, FileTransfer
+from app.models import AnalysisJob, Release, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
 from app.services.files import MARKER, snapshot, same_content, file_digest, album_files
 from app.services.locks import process_lock
 from app.services.settings import workflow_settings
@@ -40,19 +40,22 @@ def is_within(path: Path, roots: tuple[Path, ...]) -> bool:
 
 def configured_target(kind: str, settings: dict) -> Path:
     target = settings.get(kind.lower())
-    if kind not in {"STAGING", "QUARANTINE", "REJECTED"} or not target:
+    if kind not in {"STAGING", "QUARANTINE", "REJECTED", "TRASH"} or not target:
         raise FileOperationError(f"{kind.lower()} destination is not configured")
     return Path(target).resolve()
 
 
-def validate_source(path: Path, settings: dict) -> Path:
+def validate_source(path: Path, settings: dict, *, allow_managed: bool = False) -> Path:
     source = path.resolve()
     if not settings["enabled"]:
         raise FileOperationError("file operations are disabled")
     if not source.is_dir():
         raise FileOperationError(f"source directory does not exist: {source}")
     roots = tuple(Path(p).resolve() for p in settings["movable_roots"])
-    protected = roots + tuple(Path(settings[k]).resolve() for k in ("staging", "quarantine", "rejected") if settings[k])
+    managed = tuple(Path(settings[k]).resolve() for k in ("staging", "quarantine", "rejected", "trash") if settings.get(k))
+    protected = roots + managed
+    if allow_managed:
+        roots += managed
     if any(root.is_relative_to(source) for root in protected):
         raise FileOperationError("cannot move or delete a configured root or its parent")
     if not is_within(source, roots):
@@ -62,12 +65,12 @@ def validate_source(path: Path, settings: dict) -> Path:
     return source
 
 
-def destination_for(source: Path, kind: str, settings: dict) -> Path:
+def destination_for(source: Path, kind: str, settings: dict, *, basename: str | None = None) -> Path:
     root = configured_target(kind, settings)
     if root.is_relative_to(source):
         raise FileOperationError("destination cannot be inside the source album")
     root.mkdir(parents=True, exist_ok=True)
-    destination = (root / source.name).resolve()
+    destination = (root / (basename or source.name)).resolve()
 
     if destination == source or source.is_relative_to(destination):
         raise FileOperationError("release is already in that destination")
@@ -148,6 +151,10 @@ def transfer_state(transfer_id: str, state: str, error: str | None = None) -> No
     with SessionLocal() as session:
         transfer = session.get(FileTransfer, transfer_id)
         transfer.state, transfer.error = state, error
+        if state == "COMPLETE" and transfer.trash_entry_id:
+            entry = session.get(TrashEntry, transfer.trash_entry_id)
+            entry.state = "TRASHED" if transfer.target_kind == "TRASH" else "RESTORED"
+            entry.finished_at = utc_now()
         session.commit()
 
 
@@ -160,6 +167,8 @@ def owned_directory(path: Path, transfer_id: str) -> bool:
 
 def run_transfer(transfer_id: str) -> Path:
     """Resume a journaled copy, publication, database update, and source cleanup."""
+    if workflow_settings()["locked"]:
+        raise FileOperationError("File operations are locked by the deployment")
     with SessionLocal() as session:
         transfer = session.get(FileTransfer, transfer_id)
         if transfer is None:
@@ -200,11 +209,17 @@ def run_transfer(transfer_id: str) -> Path:
                 raise FileOperationError("release no longer exists")
             if release.source_path == str(source):
                 if current.manual_pass:
+                    previous = {track.id: track.human_review for track in release.tracks}
                     approve_release(release)
+                    for track in release.tracks:
+                        if previous[track.id] != track.human_review:
+                            session.add(ReviewEvent(release_id=release.id, track_path=track.display_path,
+                                previous=previous[track.id], decision=track.human_review, note="Approved during manual staging",
+                                actor=current.actor, created_at=utc_now()))
                 update_paths(release, source, destination)
                 session.add(ReleaseOperation(release_id=release.id,
-                    action="MANUAL_PASS_TO_STAGING" if current.manual_pass else f"MOVE_TO_{current.target_kind}",
-                    source_path=str(source), destination_path=str(destination), created_at=utc_now()))
+                    action="MANUAL_PASS_TO_STAGING" if current.manual_pass else "RESTORE_FROM_TRASH" if current.target_kind == "RESTORE" else "MOVE_TO_TRASH" if current.target_kind == "TRASH" else f"MOVE_TO_{current.target_kind}",
+                    source_path=str(source), destination_path=str(destination), created_at=utc_now(), actor=current.actor))
             elif release.source_path != str(destination):
                 raise FileOperationError("release path changed independently of this transfer")
             current.state, current.error = "CLEANUP", None
@@ -233,7 +248,7 @@ def run_transfer(transfer_id: str) -> Path:
 
 
 def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False,
-                 current_job_id: int | None = None) -> Path:
+                 current_job_id: int | None = None, trash_entry_id: str | None = None, actor: str = "local") -> Path:
     normalized = target_kind.upper()
     settings = workflow_settings()
     try:
@@ -243,9 +258,27 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 if release is None:
                     raise FileOperationError("release not found")
                 check_pending_transfer(session, release_id)
-                source = validate_source(Path(release.source_path), settings)
+                source = validate_source(Path(release.source_path), settings, allow_managed=True)
                 check_active_jobs(session, source, current_job_id)
-            destination = destination_for(source, normalized, settings)
+                active_trash = session.scalar(select(TrashEntry).where(TrashEntry.release_id == release_id,
+                    TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"})))
+                if active_trash and normalized != "RESTORE":
+                    raise FileOperationError("restore this album from the trash before moving it")
+                if normalized == "RESTORE":
+                    entry = session.get(TrashEntry, trash_entry_id)
+                    if entry is None or entry.release_id != release_id or entry.state != "TRASHED" or source != Path(entry.trash_path).resolve():
+                        raise FileOperationError("trash entry is not ready to restore")
+                    destination = Path(entry.original_path).resolve()
+                    roots = tuple(Path(p).resolve() for p in settings["movable_roots"])
+                    roots += tuple(Path(settings[k]).resolve() for k in ("staging", "quarantine", "rejected") if settings[k])
+                    if not is_within(destination, roots) or not destination.parent.is_dir() or destination.exists():
+                        raise FileOperationError("original destination is unavailable, unauthorized or already occupied")
+            transfer_id = uuid4().hex
+            if normalized != "RESTORE":
+                destination = destination_for(source, normalized, settings,
+                    basename=f"{source.name[:100]}--{transfer_id[:12]}" if normalized == "TRASH" else None)
+                if normalized == "TRASH":
+                    trash_entry_id = transfer_id
             # Slow disk reads must not hold SQLite's writer lock.
             manifest = snapshot(source, hashes=True)
             if not manifest:
@@ -258,7 +291,7 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 if release is None or Path(release.source_path).resolve() != source:
                     raise FileOperationError("release changed while preparing its transfer")
                 check_pending_transfer(session, release_id)
-                validate_source(source, settings)
+                validate_source(source, settings, allow_managed=True)
                 check_active_jobs(session, source, current_job_id)
                 previous_status = release.status
                 previous_reviews = [track.human_review for track in release.tracks]
@@ -271,11 +304,17 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 release.status = previous_status
                 for track, review in zip(release.tracks, previous_reviews):
                     track.human_review = review
-                transfer_id = uuid4().hex
-                session.add(FileTransfer(id=transfer_id, release_id=release_id, job_id=current_job_id, source_path=str(source),
+                if normalized == "RESTORE":
+                    entry = session.get(TrashEntry, trash_entry_id)
+                    if entry is None or entry.state != "TRASHED":
+                        raise FileOperationError("trash entry changed during preparation")
+                if normalized == "TRASH":
+                    session.add(TrashEntry(id=trash_entry_id, release_id=release_id, original_path=str(source),
+                        trash_path=str(destination), manifest_json=json.dumps(manifest), state="PENDING", created_at=utc_now(), actor=actor))
+                session.add(FileTransfer(id=transfer_id, release_id=release_id, job_id=current_job_id, trash_entry_id=trash_entry_id, source_path=str(source),
                     destination_path=str(destination), temporary_path=str(destination.parent / f".sonic-sentry-{transfer_id}.partial"),
                     state="PREPARED", manual_pass=manual_pass, target_kind=normalized,
-                    manifest_json=json.dumps(manifest), created_at=utc_now()))
+                    manifest_json=json.dumps(manifest), created_at=utc_now(), actor=actor))
                 # Approval is applied only when publication has been verified.
                 session.commit()
             return run_transfer(transfer_id)
@@ -305,6 +344,12 @@ def close_transfer(transfer_id: str) -> None:
             if release is None or not Path(release.source_path).is_dir() or any(not Path(t.path).is_file() for t in release.tracks):
                 raise FileOperationError("restore the files referenced by this release before closing its transfer")
             transfer.state = "ABANDONED"
+            if transfer.trash_entry_id:
+                entry = session.get(TrashEntry, transfer.trash_entry_id)
+                if transfer.target_kind == "TRASH":
+                    entry.state = "TRASHED" if release.source_path == transfer.destination_path else "CANCELLED"
+                else:
+                    entry.state = "RESTORED" if release.source_path == transfer.destination_path else "TRASHED"
             transfer.error = "Closed by operator; all remaining source, destination and temporary files were preserved. " + (transfer.error or "")
             session.commit()
     except RuntimeError as exc:
@@ -324,33 +369,9 @@ def recover_transfers() -> int:
     return recovered
 
 
-def delete_release_files(release_id: int) -> None:
-    settings = workflow_settings()
-    with SessionLocal() as session:
-        lock_file_operations(session)
-        release = session.scalar(
-            select(Release).where(Release.id == release_id)
-        )
-        if release is None:
-            raise FileOperationError("release not found")
-
-        check_pending_transfer(session, release_id)
-        source = validate_source(Path(release.source_path), settings)
-        check_active_jobs(session, source)
-        try:
-            shutil.rmtree(source)
-        except OSError as exc:
-            raise FileOperationError(f"could not delete album: {exc}") from exc
-        session.add(
-            ReleaseOperation(
-                release_id=release.id,
-                action="DELETE",
-                source_path=str(source),
-                destination_path=None,
-                created_at=utc_now(),
-            )
-        )
-        session.commit()
+def delete_release_files(release_id: int, *, actor: str = "local") -> Path:
+    """Compatibility name: deletion now moves to the recoverable trash."""
+    return move_release(release_id, "TRASH", actor=actor)
 
 
 def auto_route_release(release_id: int, *, current_job_id: int | None = None) -> Path | None:
@@ -372,6 +393,9 @@ def auto_route_release(release_id: int, *, current_job_id: int | None = None) ->
 
     if target is None:
         raise FileOperationError("release has no routable verdict")
+    expected = settings.get(target.lower())
+    if expected and Path(release.source_path).resolve().is_relative_to(Path(expected).resolve()) and Path(release.source_path).resolve() != Path(expected).resolve():
+        return Path(release.source_path)
     return move_release(release_id, target, current_job_id=current_job_id)
 
 
@@ -398,6 +422,9 @@ def settings_snapshot() -> dict:
         "staging": describe(settings["staging"]),
         "quarantine": describe(settings["quarantine"]),
         "rejected": describe(settings["rejected"]),
+        "trash": describe(settings["trash"]),
+        "locked": settings["locked"],
+        "configuration_origin": settings["configuration_origin"],
     }
 
 

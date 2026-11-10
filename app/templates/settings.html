@@ -5,14 +5,14 @@
 
 <section class="panel settings-panel editable-settings">
   <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Interface language') }}</h2><p>{{ _('Language help') }}</p></div></div>
-  <form class="language-form" method="post" action="/settings/language">
+  <form class="language-form" method="post" action="/settings/language">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
     <select name="language" aria-label="{{ _('Interface language') }}">
       <option value="auto" {{ 'selected' if language_preference == 'auto' }}>{{ _('Automatic (browser)') }} — {{ effective_language|upper }}</option>
       <option value="it" {{ 'selected' if language_preference == 'it' }}>Italiano</option>
       <option value="en" {{ 'selected' if language_preference == 'en' }}>English</option>
     </select>
     <button class="button success" type="submit">{{ _('Save language') }}</button>
-  </form>
+  </fieldset></form>
 </section>
 
 <section class="panel settings-panel source-settings">
@@ -22,39 +22,41 @@
     <div class="source-item {{ 'disabled' if not source.enabled }}">
       <span><strong>{{ source.name }}</strong><small>{{ source.kind }}</small><code>{{ source.path }}</code></span>
       <span class="source-actions">
-        <form method="post" action="/settings/sources/{{ source.id }}/watch"><button class="button secondary" type="submit">{{ _('Stop watching') if source.watch_enabled else _('Watch folder') }}</button></form>
-        <form method="post" action="/settings/sources/{{ source.id }}/toggle"><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></form>
-        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit='return confirm({{ _('Remove source confirm')|tojson }})'><button class="button danger" type="submit">{{ _('Remove') }}</button></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/watch">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Stop watching') if source.watch_enabled else _('Watch folder') }}</button></fieldset></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/toggle">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Disable') if source.enabled else _('Enable') }}</button></fieldset></form>
+        <form method="post" action="/settings/sources/{{ source.id }}/delete" onsubmit='return confirm({{ _('Remove source confirm')|tojson }})'>{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}><button class="button danger" type="submit">{{ _('Remove') }}</button></fieldset></form>
       </span>
     </div>
   {% else %}<p class="settings-warning">{{ _('No analysis sources configured.') }}</p>{% endfor %}
   </div>
-  <form class="source-form" method="post" action="/settings/sources">
+  <form class="source-form" method="post" action="/settings/sources">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
     <label>{{ _('Name') }}<input name="name" required placeholder="qBittorrent"></label>
     <label>{{ _('Type') }}<select name="kind"><option value="FILESYSTEM">Filesystem</option><option value="SLSKD">slskd</option><option value="QBITTORRENT">qBittorrent</option><option value="NZBGET">NZBGet</option><option value="OTHER">{{ _('Other') }}</option></select></label>
     <label class="source-path-input">{{ _('Container path') }}<input name="path" required value="/data/" placeholder="/data/downloads/qbittorrent"></label>
     <button class="button success" type="submit">{{ _('Add source') }}</button>
-  </form>
+  </fieldset></form>
 </section>
 
 <section class="panel settings-panel editable-settings" id="automation">
   <div class="section-heading"><div><p class="eyebrow">{{ _('Editable settings') }}</p><h2>{{ _('Album destinations and automation') }}</h2><p>{{ _('Choose which albums to route without confirmation. Approved albums go to Picard; other results stay for review or are routed by verdict. Files are never deleted automatically.') }}</p></div></div>
   {% if error %}<p class="notice error" role="alert">{{ error }}</p>{% endif %}
   {% if request.query_params.get('saved') %}<p class="notice" role="status">{{ _('Workflow settings saved.') }}</p>{% endif %}
-  <form class="workflow-form" method="post" action="/settings/workflow">
-    <label class="checkbox-label"><input type="checkbox" name="enabled" value="true" {% if workflow.enabled %}checked{% endif %}> {{ _('Allow album moves') }}</label>
+  <p class="settings-explanation">{{ _('Effective configuration source') }}: <strong>{{ _(workflow.configuration_origin) }}</strong></p>
+  {% if workflow.locked %}<p class="notice error">{{ _('File operations are locked by the deployment.') }}</p>{% endif %}
+  <form class="workflow-form" method="post" action="/settings/workflow">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
+    <label class="checkbox-label"><input type="checkbox" name="enabled" value="true" {% if workflow.locked %}disabled{% endif %} {% if workflow.enabled %}checked{% endif %}> {{ _('Allow album moves') }}</label>
     <label>{{ _('Automatic routing') }}<select name="policy">
       <option value="manual" {% if not workflow.auto_route %}selected{% endif %}>{{ _('Manual') }}</option>
       <option value="pass" {% if workflow.auto_route and not workflow.route_nonpass %}selected{% endif %}>{{ _('Automatically route approved albums only') }}</option>
       <option value="all" {% if workflow.auto_route and workflow.route_nonpass %}selected{% endif %}>{{ _('Automatically route every verdict') }}</option>
     </select></label>
     <label>{{ _('Authorized source folders') }}<textarea name="movable_roots" rows="4" placeholder="/data/downloads/soulseek">{{ workflow.movable_roots|join('\n') }}</textarea><small>{{ _('One absolute directory per line. Root folders themselves are protected.') }}</small></label>
-    {% for key, title in [('staging', 'Approved albums (Picard)'), ('quarantine', 'Albums to review'), ('rejected', 'Rejected albums')] %}
+    {% for key, title in [('staging', 'Approved albums (Picard)'), ('quarantine', 'Albums to review'), ('rejected', 'Rejected albums'), ('trash', 'Trash')] %}
     <label>{{ _(title) }}<input name="{{ key }}" value="{{ workflow[key] }}" placeholder="/data/music/validator/{{ key }}"></label>
     {% endfor %}
     <p class="settings-explanation">{{ _('Use existing writable container paths. Changes are stored in the database and apply to future moves without a restart. Docker variables provide the initial defaults.') }}</p>
     <button class="button success" type="submit">{{ _('Save workflow') }}</button>
-  </form>
+  </fieldset></form>
 </section>
 <section class="settings-grid">
 {% for name, item in [(_('Approved albums (Picard)'), settings.staging), (_('Albums to review'), settings.quarantine), (_('Rejected albums'), settings.rejected)] %}
@@ -63,11 +65,20 @@
 </section>
 <section class="panel settings-panel" id="ingestion">
 <h2>{{ _('Automatic ingestion') }}</h2><p>{{ _('Enable watching on each source above. Only stable albums are queued; partial downloads and output folders are excluded. Exact FLAC duplicates stay in place.') }}</p>
-<form class="workflow-form" method="post" action="/settings/ingestion">
+<form class="workflow-form" method="post" action="/settings/ingestion">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
 <label>{{ _('Scan interval (seconds)') }}<input type="number" name="scan_interval" min="10" max="86400" value="{{ workflow.scan_interval }}" required></label>
 <label>{{ _('Wait for stable files (seconds)') }}<input type="number" name="settle_seconds" min="30" max="86400" value="{{ workflow.settle_seconds }}" required></label>
 <button class="button success" type="submit">{{ _('Save ingestion settings') }}</button>
-</form><p><a href="/activity">{{ _('View ingestion and transfer activity') }}</a></p>
+</fieldset></form><p><a href="/activity">{{ _('View ingestion and transfer activity') }}</a></p>
 {% for source in sources %}{% if source.watch_enabled %}<div class="settings-row"><span>{{ source.name }} — {{ _('Watching') if source.enabled else _('Disabled') }}</span><span>{{ source.last_scan_at or '—' }}</span></div>{% if source.watch_error %}<p class="notice error">{{ source.watch_error }}</p>{% endif %}{% endif %}{% endfor %}
 </section>
+<section class="panel settings-panel" id="operations"><h2>{{ _('Analysis limits and retention') }}</h2><p>{{ _('Retries apply only to timeouts and transient system errors. Cleanup is manual and the trash is never emptied automatically.') }}</p>
+<form class="workflow-form" method="post" action="/settings/operations">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
+<label>{{ _('Total analysis timeout (seconds)') }}<input type="number" name="analysis_timeout" min="30" max="604800" value="{{ workflow.analysis_timeout }}" required></label>
+<label>{{ _('No track progress timeout (seconds)') }}<input type="number" name="stall_timeout" min="30" max="604800" value="{{ workflow.stall_timeout }}" required></label>
+<label>{{ _('Automatic retries') }}<input type="number" name="retry_limit" min="0" max="3" value="{{ workflow.retry_limit }}" required></label>
+<label>{{ _('Report retention (days)') }}<input type="number" name="report_days" min="1" max="3650" value="{{ workflow.report_days }}" required></label>
+<label>{{ _('Orphan upload retention (days)') }}<input type="number" name="upload_days" min="1" max="3650" value="{{ workflow.upload_days }}" required></label>
+<button class="button success" type="submit">{{ _('Save operational settings') }}</button></fieldset></form><p><a href="/maintenance">{{ _('Open cleanup preview and backup') }}</a></p></section>
+<section class="panel settings-panel"><h2>{{ _('Local access') }}</h2><p>{{ _('Enabled') if auth_enabled() else _('Disabled') }}</p><p>{{ _('Accounts are managed from the container CLI. Roles: viewer, operator and admin. Create an administrator before enabling SONIC_AUTH_ENABLED.') }}</p><pre>python -m app.security add-user admin --role admin</pre><p>{{ _('Passwords are prompted interactively. Enable SONIC_COOKIE_SECURE when using HTTPS through a reverse proxy.') }}</p></section>
 {% endblock %}

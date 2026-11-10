@@ -4,13 +4,16 @@ import signal
 import subprocess
 import sys
 import time
+import threading
+import errno
 from pathlib import Path
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 
 from app.config import PROJECT_ROOT, REPORT_ROOT
 from app.database import SessionLocal, engine
 from app.migrations import initialize_database
+from app.health import Heartbeat
 from app.models import AnalysisJob, AnalyzedContent, FileTransfer
 from app.services.importer import import_report
 from app.services.file_workflow import FileOperationError, auto_route_release, recover_transfers, utc_now, lock_file_operations
@@ -21,6 +24,21 @@ from app.services.settings import workflow_settings
 
 VALIDATOR = PROJECT_ROOT / "validator" / "validate_release.py"
 EXPECTED_EXIT_CODES = {0, 10, 20}
+STOP = threading.Event()
+HEARTBEAT = None
+
+
+def phase(name, **values):
+    if HEARTBEAT:
+        HEARTBEAT.update(phase=name, **values)
+
+
+class WorkerStopping(Exception):
+    pass
+
+
+class AnalysisTimeout(TimeoutError):
+    pass
 
 
 class AnalysisCancelled(Exception):
@@ -53,11 +71,12 @@ def recover_interrupted_jobs() -> int:
 
 def claim_job():
     with SessionLocal() as session:
-        job = session.scalar(select(AnalysisJob).where(AnalysisJob.status == "QUEUED").order_by(AnalysisJob.id).limit(1))
+        job = session.scalar(select(AnalysisJob).where(AnalysisJob.status == "QUEUED", or_(AnalysisJob.next_run_at.is_(None), AnalysisJob.next_run_at <= time.time())).order_by(AnalysisJob.id).limit(1))
         if job is None:
             return None
         result = session.execute(update(AnalysisJob).where(AnalysisJob.id == job.id, AnalysisJob.status == "QUEUED").values(
-            status="ANALYZING", error=None, progress=0, progress_total=0, started_at=utc_now(), finished_at=None))
+            status="ANALYZING", error=None, progress=0, progress_total=0, started_at=utc_now(), finished_at=None,
+            attempts=AnalysisJob.attempts + 1, next_run_at=None))
         session.commit()
         if result.rowcount != 1:
             return None
@@ -107,8 +126,17 @@ def run_validator(job_id: int, source: Path, report: Path):
                              "--progress", str(progress_file), str(source)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **options)
     last_progress = None
+    limits = workflow_settings()
+    started = progressed = time.monotonic()
+    phase("VALIDATING", job_id=job_id, last_progress=time.time(), stall_timeout=limits["stall_timeout"], deadline=time.time() + limits["analysis_timeout"])
     try:
         while True:
+            if STOP.is_set():
+                raise WorkerStopping()
+            if time.monotonic() - started > limits["analysis_timeout"]:
+                raise AnalysisTimeout("Analysis exceeded its total time limit")
+            if time.monotonic() - progressed > limits["stall_timeout"]:
+                raise AnalysisTimeout("Analysis stopped reporting track progress")
             if cancellation_requested(job_id):
                 raise AnalysisCancelled()
             try:
@@ -120,6 +148,9 @@ def run_validator(job_id: int, source: Path, report: Path):
                             progress=progress[0], progress_total=progress[1]))
                         session.commit()
                     last_progress = progress
+                    progressed = time.monotonic()
+                    if HEARTBEAT:
+                        HEARTBEAT.update(last_progress=time.time())
             except (OSError, ValueError, KeyError):
                 pass
             try:
@@ -138,6 +169,7 @@ def process_job(job):
     try:
         if cancellation_requested(job_id):
             raise AnalysisCancelled()
+        phase("PREPARING", job_id=job_id)
         before = snapshot(source, hashes=True)
         report.unlink(missing_ok=True)
         proc = run_validator(job_id, source, report)
@@ -146,6 +178,7 @@ def process_job(job):
             raise RuntimeError(f"validator exited with code {proc.returncode}")
         if not report.is_file():
             raise RuntimeError("validator did not create a report")
+        phase("VERIFYING", job_id=job_id)
         after = snapshot(source, hashes=True)
         if not same_content(after, before):
             changed = sorted(name for name in before.keys() | after.keys()
@@ -168,35 +201,75 @@ def process_job(job):
             if session.get(AnalyzedContent, digest) is None:
                 session.add(AnalyzedContent(content_hash=digest, release_id=release.id))
             session.commit()
+        phase("TRANSFERRING", job_id=job_id)
         routing_error = None
         try:
             auto_route_release(release.id, current_job_id=job_id)
         except (FileOperationError, OSError) as exc:
             routing_error = f"Analysis completed; automatic routing needs attention: {exc}"
         finish_job(job_id, "COMPLETED", routing_error)
+    except WorkerStopping:
+        raise
     except AnalysisCancelled:
         finish_job(job_id, "CANCELLED")
     except Exception as exc:
         print(f"Job {job_id} failed: {exc}", flush=True)
+        transient = isinstance(exc, AnalysisTimeout) or isinstance(exc, OSError) and exc.errno in {errno.EAGAIN, errno.EBUSY, errno.EINTR, errno.ETIMEDOUT}
+        with SessionLocal() as session:
+            current = session.get(AnalysisJob, job_id)
+            if transient and current and max(current.attempts, 1) <= workflow_settings()["retry_limit"]:
+                current.status, current.next_run_at = "QUEUED", time.time() + 60
+                current.error = f"Temporary failure; retry scheduled in 60 seconds: {exc}"
+                session.commit()
+                return
         finish_job(job_id, "FAILED", str(exc))
 
 
-def main():
-    initialize_database(engine)
-    with process_lock("worker"):
-        transfers = recover_transfers()
-        recovered = recover_interrupted_jobs()
-        print(f"SonicSentry worker started; recovered {recovered} jobs and {transfers} transfers", flush=True)
-        last_scan = float("-inf")
-        while True:
-            if time.monotonic() - last_scan >= workflow_settings()["scan_interval"]:
+def scan_loop():
+    while not STOP.is_set():
+        try:
+            with process_lock("scanner"):
                 scan_sources()
-                last_scan = time.monotonic()
-            job = claim_job()
-            if job is None:
-                time.sleep(2)
-            else:
-                process_job(job)
+            if HEARTBEAT:
+                HEARTBEAT.update(scanner_error=None, last_scan=time.time())
+        except Exception as exc:
+            print(f"Source scan failed: {exc}", flush=True)
+            if HEARTBEAT:
+                HEARTBEAT.update(scanner_error=str(exc))
+        STOP.wait(workflow_settings()["scan_interval"])
+
+
+def main():
+    global HEARTBEAT
+    STOP.clear()
+    def stopping(*args):
+        STOP.set()
+    signal.signal(signal.SIGTERM, stopping)
+    signal.signal(signal.SIGINT, stopping)
+    with process_lock("worker"), Heartbeat() as heartbeat:
+        initialize_database(engine)
+        HEARTBEAT = heartbeat
+        phase("RECOVERING")
+        recover_transfers()
+        from app.services.trash import recover_purges
+        recover_purges()
+        recover_interrupted_jobs()
+        scanner = threading.Thread(target=scan_loop, daemon=True)
+        scanner.start()
+        try:
+            while not STOP.is_set():
+                phase("IDLE", job_id=None)
+                job = claim_job()
+                if job is None:
+                    STOP.wait(2)
+                else:
+                    process_job(job)
+        except WorkerStopping:
+            pass
+        finally:
+            STOP.set()
+            scanner.join(timeout=5)
+            HEARTBEAT = None
 
 
 if __name__ == "__main__":

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _(title) }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">{{ _('Destinations') }}</p><h1>{{ _(title) }}</h1><p>{{ _('Physical location and analysis verdict are shown separately.') }}</p><code>{{ root or _('Not configured') }}</code></div><a class="button secondary" href="/activity">{{ _('Activity') }}</a></section>
+<nav class="source-roots" aria-label="{{ _('Destinations') }}">{% for key, label in kinds.items() %}<a href="/destinations/{{ key }}" {% if key == kind %}aria-current="page" class="active"{% endif %}>{{ _(label) }}</a>{% endfor %}</nav>
+{% if warning %}<p class="notice error" role="status">{{ _(warning) }}</p>{% endif %}
+<form class="release-filter panel" method="get"><label>{{ _('Search releases') }}<input type="search" name="q" value="{{ query }}"></label><button class="button secondary" type="submit">{{ _('Filter') }}</button><span>{{ total }} {{ _('total') }}</span></form>
+<section class="panel table-scroll"><table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Files') }}</th><th>{{ _('Analysis verdict') }}</th><th>{{ _('Actions') }}</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{% if row.release %}<a href="/releases/{{ row.release.id }}">{{ row.release.title }}</a>{% else %}<strong>{{ row.name }}</strong><small>{{ _('Not registered in the database') }}</small>{% endif %}<code class="album-path">{{ row.path }}</code></td>
+<td><span class="badge {{ 'pass' if row.exists else 'rejected' }}">{{ _('Found') if row.exists else _('Missing') }}</span>{% if row.entry %}<small>{{ _(row.entry.state) }}</small>{% endif %}</td>
+<td>{% if row.release %}<span class="badge {{ row.release.status|lower }}">{{ row.release.status|human_status }}</span>{% else %}—{% endif %}</td>
+<td><div class="destination-actions">{% if can_operate() %}
+{% if kind != 'trash' and row.exists %}<form method="post" action="/destinations/{{ kind }}/analyze">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><input type="hidden" name="path" value="{{ row.path }}"><button class="button secondary" type="submit">{{ _('Analyze folder') }}</button></fieldset></form>{% endif %}
+{% if row.entry and row.entry.state == 'TRASHED' %}<form method="post" action="/trash/{{ row.entry.id }}/restore">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button success" type="submit">{{ _('Restore original location') }}</button></fieldset></form>{% endif %}
+{% if row.entry and row.entry.state in ['TRASHED','PURGE_FAILED'] and is_admin() %}<details class="purge-details"><summary>{{ _('Permanently delete') }}</summary><p>{{ _('This deletes the trashed audio permanently. Type ELIMINA to confirm.') }}</p><form method="post" action="/trash/{{ row.entry.id }}/purge">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><input name="confirmation" required pattern="ELIMINA" placeholder="ELIMINA" aria-label="{{ _('Deletion confirmation') }}"><button class="button danger" type="submit">{{ _('Permanently delete') }}</button></fieldset></form></details>{% endif %}
+{% endif %}</div></td></tr>{% else %}<tr><td colspan="4" class="empty">{{ _('No folders in this destination.') }}</td></tr>{% endfor %}
+</tbody></table></section>
+{% if kind == 'trash' %}<p class="settings-explanation">{{ _('Trash is never emptied automatically. Unknown folders are kept and require manual inspection.') }}</p>{% endif %}
+<nav class="pagination" aria-label="{{ _('Pages') }}">{% if page > 1 %}<a href="?q={{ query|urlencode }}&page={{ page-1 }}">← {{ _('Previous') }}</a>{% endif %}<span>{{ page }} / {{ pages }}</span>{% if page < pages %}<a href="?q={{ query|urlencode }}&page={{ page+1 }}">{{ _('Next') }} →</a>{% endif %}</nav>
+{% endblock %}

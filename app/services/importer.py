@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import select, delete
 
 from app.database import SessionLocal
-from app.models import Release, Track, AnalyzedContent
+from app.models import Release, Track, AnalyzedContent, ReviewEvent
 from app.services.verdicts import recalculate_release_status
 from app.services.file_workflow import lock_file_operations, check_pending_transfer
 
@@ -44,6 +44,12 @@ def import_report(report_path: Path) -> Release:
             check_pending_transfer(session, existing.id)
             session.execute(delete(AnalyzedContent).where(AnalyzedContent.release_id == existing.id))
             # Keep release identity and file-operation history across reanalysis.
+            for track in existing.tracks:
+                if track.human_review != "NONE":
+                    from app.services.file_workflow import utc_now
+                    session.add(ReviewEvent(release_id=existing.id, track_path=track.display_path,
+                        previous=track.human_review, decision="NONE", actor="analysis",
+                        note="Review reset by a new analysis", created_at=utc_now()))
             existing.tracks.clear()
             session.flush()
         release = existing if existing is not None else Release(source_path=source_path, title=source.name, status="QUARANTINE")

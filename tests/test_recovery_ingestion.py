@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
+from client import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 
 from app import main, worker

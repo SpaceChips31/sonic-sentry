@@ -70,6 +70,8 @@ class AnalysisJob(Base):
     progress_total: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[str | None] = mapped_column(String, nullable=True)
     finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_run_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class ReleaseOperation(Base):
@@ -84,6 +86,7 @@ class ReleaseOperation(Base):
     source_path: Mapped[str] = mapped_column(Text)
     destination_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String)
+    actor: Mapped[str] = mapped_column(String, default="local")
 
     release: Mapped[Release] = relationship(back_populates="operations")
 
@@ -114,6 +117,7 @@ class FileTransfer(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     release_id: Mapped[int] = mapped_column(Integer, index=True)
     job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    trash_entry_id: Mapped[str | None] = mapped_column(String, nullable=True)
     source_path: Mapped[str] = mapped_column(Text)
     destination_path: Mapped[str] = mapped_column(Text)
     temporary_path: Mapped[str] = mapped_column(Text)
@@ -123,6 +127,7 @@ class FileTransfer(Base):
     manifest_json: Mapped[str] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String)
+    actor: Mapped[str] = mapped_column(String, default="local")
 
 
 class SourceObservation(Base):
@@ -145,3 +150,40 @@ class AnalyzedContent(Base):
 
     content_hash: Mapped[str] = mapped_column(String, primary_key=True)
     release_id: Mapped[int] = mapped_column(Integer)
+
+
+class TrashEntry(Base):
+    __tablename__ = "trash_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    release_id: Mapped[int] = mapped_column(Integer, index=True)
+    original_path: Mapped[str] = mapped_column(Text)
+    trash_path: Mapped[str] = mapped_column(Text)
+    manifest_json: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[str] = mapped_column(String)
+    finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor: Mapped[str] = mapped_column(String, default="local")
+    purge_actor: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class ReviewEvent(Base):
+    __tablename__ = "review_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    release_id: Mapped[int] = mapped_column(Integer, index=True)
+    track_path: Mapped[str] = mapped_column(Text)
+    previous: Mapped[str] = mapped_column(String)
+    decision: Mapped[str] = mapped_column(String)
+    note: Mapped[str] = mapped_column(Text, default="")
+    actor: Mapped[str] = mapped_column(String, default="local")
+    created_at: Mapped[str] = mapped_column(String)
+
+
+class AuthUser(Base):
+    __tablename__ = "auth_users"
+
+    username: Mapped[str] = mapped_column(String, primary_key=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(String)

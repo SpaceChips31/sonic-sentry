@@ -18,37 +18,53 @@ def workflow_settings() -> dict:
         "route_nonpass": True,
         "scan_interval": 60,
         "settle_seconds": 300,
+        "analysis_timeout": 7200,
+        "stall_timeout": 1800,
+        "retry_limit": 1,
+        "report_days": 30,
+        "upload_days": 7,
         "movable_roots": [str(p) for p in config.MOVABLE_ROOTS],
         "staging": str(config.STAGING_ROOT) if config.STAGING_ROOT else "",
         "quarantine": str(config.QUARANTINE_ROOT) if config.QUARANTINE_ROOT else "",
         "rejected": str(config.REJECTED_ROOT) if config.REJECTED_ROOT else "",
+        "trash": str(config.TRASH_ROOT) if config.TRASH_ROOT else "",
     }
     with SessionLocal() as session:
         saved = session.get(WorkflowSettings, 1)
         if saved:
             defaults.update(json.loads(saved.payload))
+    if not defaults["trash"] and defaults["quarantine"]:
+        defaults["trash"] = str(Path(defaults["quarantine"]).parent / "trash")
+    defaults["configuration_origin"] = "database" if saved and "enabled" in json.loads(saved.payload) else "environment"
+    defaults["locked"] = config.FILE_OPERATIONS_LOCKED
+    if config.FILE_OPERATIONS_LOCKED:
+        defaults["enabled"] = defaults["auto_route"] = False
     return defaults
 
 
 def save_workflow_settings(*, enabled: bool, policy: str, movable_roots: str,
-                           staging: str, quarantine: str, rejected: str) -> None:
+                           staging: str, quarantine: str, rejected: str, trash: str | None = None) -> None:
+    if enabled and config.FILE_OPERATIONS_LOCKED:
+        raise WorkflowConfigurationError("File operations are locked by the deployment.")
     if policy not in {"manual", "pass", "all"}:
         raise WorkflowConfigurationError("Invalid routing policy")
     if policy != "manual" and not enabled:
         raise WorkflowConfigurationError("Enable file operations before automatic routing.")
 
-    def directory(value: str) -> str:
+    def directory(value: str, *, allow_new: bool = False) -> str:
         value = value.strip()
         if not value:
             return ""
         path = Path(value)
-        if not path.is_absolute() or (enabled and not path.is_dir()):
+        if not path.is_absolute() or (enabled and not path.is_dir() and not (allow_new and path.parent.is_dir())):
             raise WorkflowConfigurationError(f"Use an existing absolute directory: {value}")
         return str(path.resolve())
 
     roots = list(dict.fromkeys(directory(line) for line in movable_roots.splitlines() if line.strip()))
     targets = {"staging": directory(staging), "quarantine": directory(quarantine),
                "rejected": directory(rejected)}
+    trash_value = trash if trash is not None else workflow_settings()["trash"] or (str(Path(quarantine).parent / "trash") if quarantine else "")
+    targets["trash"] = directory(trash_value, allow_new=True)
     configured = [Path(p) for p in targets.values() if p]
     for i, path in enumerate(configured):
         if any(path.is_relative_to(other) or other.is_relative_to(path)
@@ -65,7 +81,7 @@ def save_workflow_settings(*, enabled: bool, policy: str, movable_roots: str,
         import tempfile
         for path in roots + list(filter(None, targets.values())):
             try:
-                with tempfile.TemporaryFile(dir=path):
+                with tempfile.TemporaryFile(dir=path if Path(path).is_dir() else Path(path).parent):
                     pass
             except OSError as exc:
                 raise WorkflowConfigurationError(f"Directory is not writable: {path}") from exc
@@ -79,6 +95,24 @@ def save_workflow_settings(*, enabled: bool, policy: str, movable_roots: str,
             saved = WorkflowSettings(id=1, payload="{}")
             session.add(saved)
         saved.payload = json.dumps({**json.loads(saved.payload), **payload})
+        session.commit()
+
+
+def save_operational_settings(analysis_timeout: int, stall_timeout: int, retry_limit: int,
+                              report_days: int, upload_days: int) -> None:
+    if not 30 <= analysis_timeout <= 604800 or not 30 <= stall_timeout <= analysis_timeout:
+        raise WorkflowConfigurationError("Timeouts must be at least 30 seconds; stall timeout cannot exceed total timeout.")
+    if not 0 <= retry_limit <= 3 or not 1 <= report_days <= 3650 or not 1 <= upload_days <= 3650:
+        raise WorkflowConfigurationError("Use 0–3 retries and 1–3650 retention days.")
+    with SessionLocal() as session:
+        from app.services.file_workflow import lock_file_operations
+        lock_file_operations(session)
+        saved = session.get(WorkflowSettings, 1)
+        if saved is None:
+            saved = WorkflowSettings(id=1, payload="{}")
+            session.add(saved)
+        saved.payload = json.dumps({**json.loads(saved.payload), "analysis_timeout": analysis_timeout,
+            "stall_timeout": stall_timeout, "retry_limit": retry_limit, "report_days": report_days, "upload_days": upload_days})
         session.commit()
 
 
