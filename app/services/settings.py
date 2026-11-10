@@ -35,7 +35,7 @@ def workflow_settings() -> dict:
             defaults.update(json.loads(saved.payload))
     if not defaults["trash"] and defaults["quarantine"]:
         defaults["trash"] = str(Path(defaults["quarantine"]).parent / "trash")
-    defaults["configuration_origin"] = "database" if saved else "environment"
+    defaults["configuration_origin"] = "database" if saved and "enabled" in json.loads(saved.payload) else "environment"
     defaults["locked"] = config.FILE_OPERATIONS_LOCKED
     if config.FILE_OPERATIONS_LOCKED:
         defaults["enabled"] = defaults["auto_route"] = False

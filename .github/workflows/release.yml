@@ -53,7 +53,9 @@ jobs:
           load: true
           push: false
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
             VCS_REF=${{ github.sha }}
