@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Login') }} · {{ app_name }}{% endblock %}
+{% block content %}<section class="panel settings-panel login-panel"><h1>{{ _('Login') }}</h1>{% if error %}<p class="notice error" role="alert">{{ _(error) }}</p>{% endif %}
+<form class="workflow-form" method="post" action="/login">{{ csrf_input() }}<fieldset class="permission-fields" {% if not true %}disabled{% endif %}><input type="hidden" name="next" value="{{ request.query_params.get('next','/') }}"><label>{{ _('Username') }}<input name="username" autocomplete="username" maxlength="100" required></label><label>{{ _('Password') }}<input type="password" name="password" autocomplete="current-password" maxlength="1024" required></label><button class="button success" type="submit">{{ _('Login') }}</button></fieldset></form></section>{% endblock %}

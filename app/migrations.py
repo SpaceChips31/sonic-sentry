@@ -5,10 +5,13 @@ from app.database import Base
 
 
 ADDITIONS = {
+    "file_transfers": {"trash_entry_id": "VARCHAR", "actor": "VARCHAR NOT NULL DEFAULT 'local'"},
+    "release_operations": {"actor": "VARCHAR NOT NULL DEFAULT 'local'"},
     "analysis_jobs": {
         "hidden": "BOOLEAN NOT NULL DEFAULT 0", "release_id": "INTEGER", "cancel_requested": "BOOLEAN NOT NULL DEFAULT 0",
         "progress": "INTEGER NOT NULL DEFAULT 0", "progress_total": "INTEGER NOT NULL DEFAULT 0",
         "started_at": "VARCHAR", "finished_at": "VARCHAR",
+        "attempts": "INTEGER NOT NULL DEFAULT 0", "next_run_at": "FLOAT",
     },
     "analysis_sources": {
         "watch_enabled": "BOOLEAN NOT NULL DEFAULT 0", "last_scan_at": "VARCHAR", "watch_error": "TEXT",

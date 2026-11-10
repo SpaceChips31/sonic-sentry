@@ -20,7 +20,7 @@ from app.services.file_workflow import (
     lock_file_operations,
 )
 from app.services.sources import SourceConfigurationError, add_source
-from app.services.settings import WorkflowConfigurationError, save_workflow_settings, workflow_settings, save_ingestion_settings
+from app.services.settings import WorkflowConfigurationError, save_workflow_settings, workflow_settings, save_ingestion_settings, save_operational_settings
 from app.services.verdicts import recalculate_release_status
 from pathlib import Path
 
@@ -99,7 +99,7 @@ def cancel_analysis(job_id: int):
 
 
 @router.post("/releases/review")
-def bulk_review(release_ids: list[int] = Form(...), decision: str = Form(...)):
+def bulk_review(request: Request, release_ids: list[int] = Form(...), decision: str = Form(...), note: str = Form("", max_length=2000)):
     choices = {"approve": "APPROVED", "reject": "REJECTED", "reset": "NONE"}
     if decision not in choices or not release_ids or len(release_ids) > 50:
         raise HTTPException(status_code=400, detail="Select up to 50 albums and a valid decision")
@@ -116,7 +116,8 @@ def bulk_review(release_ids: list[int] = Form(...), decision: str = Form(...)):
                     raise FileOperationError("an album with integrity failures cannot be approved")
                 for track in release.tracks:
                     if track.status == "QUARANTINE":
-                        track.human_review = choices[decision]
+                        from app.services.reviews import set_review
+                        set_review(session, track, choices[decision], note, getattr(request.state, "actor", "local"))
                 recalculate_release_status(release)
             session.commit()
     except FileOperationError as exc:
@@ -153,14 +154,14 @@ def render_settings(request: Request, *, error: str | None = None, values: dict 
 @router.post("/settings/workflow", response_class=HTMLResponse)
 def update_workflow(request: Request, enabled: bool = Form(False), policy: str = Form("manual"),
                     movable_roots: str = Form(""), staging: str = Form(""),
-                    quarantine: str = Form(""), rejected: str = Form("")):
+                    quarantine: str = Form(""), rejected: str = Form(""), trash: str = Form("")):
     try:
         save_workflow_settings(enabled=enabled, policy=policy, movable_roots=movable_roots,
-                               staging=staging, quarantine=quarantine, rejected=rejected)
+                               staging=staging, quarantine=quarantine, rejected=rejected, trash=trash)
     except WorkflowConfigurationError as exc:
         values = dict(enabled=enabled, auto_route=policy != "manual", route_nonpass=policy == "all",
                       movable_roots=movable_roots.splitlines(), staging=staging,
-                      quarantine=quarantine, rejected=rejected)
+                      quarantine=quarantine, rejected=rejected, trash=trash, **{k: v for k, v in workflow_settings().items() if k not in {"enabled", "auto_route", "route_nonpass", "movable_roots", "staging", "quarantine", "rejected", "trash"}})
         response = render_settings(request, error=str(exc), values=values)
         response.status_code = 400
         return response
@@ -223,16 +224,17 @@ def delete_source(source_id: int):
 
 @router.post("/releases/{release_id}/files")
 def release_file_action(
+    request: Request,
     release_id: int,
     action: str = Form(...),
 ):
     try:
         if action == "manual-pass":
-            move_release(release_id, "STAGING", manual_pass=True)
+            move_release(release_id, "STAGING", manual_pass=True, actor=getattr(request.state, "actor", "local"))
         elif action == "quarantine":
-            move_release(release_id, "QUARANTINE")
+            move_release(release_id, "QUARANTINE", actor=getattr(request.state, "actor", "local"))
         elif action == "delete":
-            delete_release_files(release_id)
+            delete_release_files(release_id, actor=getattr(request.state, "actor", "local"))
         else:
             raise HTTPException(status_code=400, detail="Invalid action")
     except FileOperationError as exc:

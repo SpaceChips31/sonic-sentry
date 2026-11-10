@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import AnalysisJob, FileTransfer
+from app.models import AnalysisJob, FileTransfer, TrashEntry
 from app.services.file_workflow import lock_file_operations, utc_now
 
 
@@ -16,6 +16,8 @@ def enqueue_paths(paths: list[Path], source_type: str) -> list[int]:
             AnalysisJob.status.in_({"QUEUED", "ANALYZING", "ROUTING"})))]
         for transfer in session.scalars(select(FileTransfer).where(FileTransfer.state.not_in({"COMPLETE", "ABANDONED"}))):
             busy.extend((Path(transfer.source_path), Path(transfer.destination_path)))
+        busy.extend(Path(path) for path in session.scalars(select(TrashEntry.trash_path).where(
+            TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"}))))
         for path in paths:
             path = path.resolve()
             if not path.is_dir() or any(path.is_relative_to(other) or other.is_relative_to(path) for other in busy):

@@ -33,8 +33,8 @@
 </section>
 {% if track.status == "QUARANTINE" %}
 <section class="review-box"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ track.human_review|human_review }}</h2><p>{{ _('Automatic verdict unchanged') }}</p></div>
-<div class="review-actions"><form method="post" action="/tracks/{{ track.id }}/review/reject"><button class="button danger" type="submit">{{ _('Reject') }}</button></form>
-{% if track.human_review != "NONE" %}<form method="post" action="/tracks/{{ track.id }}/review/reset"><button class="button secondary" type="submit">{{ _('Reset') }}</button></form>{% endif %}
-<form method="post" action="/tracks/{{ track.id }}/review/approve"><button class="button success" type="submit">{{ _('Approve') }}</button></form></div></section>
+<div class="review-actions"><form method="post" action="/tracks/{{ track.id }}/review/reject">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><label>{{ _('Review note') }}<textarea name="note" maxlength="2000" rows="2"></textarea></label><button class="button danger" type="submit">{{ _('Reject') }}</button></fieldset></form>
+{% if track.human_review != "NONE" %}<form method="post" action="/tracks/{{ track.id }}/review/reset">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Reset') }}</button></fieldset></form>{% endif %}
+<form method="post" action="/tracks/{{ track.id }}/review/approve">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><label>{{ _('Review note') }}<textarea name="note" maxlength="2000" rows="2"></textarea></label><button class="button success" type="submit">{{ _('Approve') }}</button></fieldset></form></div></section>
 {% endif %}
 {% endblock %}

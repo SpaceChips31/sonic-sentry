@@ -143,6 +143,26 @@ def configure_templates(templates: Jinja2Templates) -> Jinja2Templates:
     def spectral_interp(context, value):
         return localized_interp(value, resolve_language(context.get("request")))
 
+    from markupsafe import Markup, escape
+
+    @pass_context
+    def csrf_input(context):
+        request = context.get("request")
+        token = getattr(request.state, "csrf_token", "") if request else ""
+        return Markup('<input type="hidden" name="csrf_token" value="{}">').format(escape(token))
+
+    @pass_context
+    def is_admin(context):
+        request = context.get("request")
+        return not request or getattr(request.state, "role", "admin") == "admin"
+
+    @pass_context
+    def can_operate(context):
+        request = context.get("request")
+        return not request or getattr(request.state, "role", "admin") in {"operator", "admin"}
+
+    from app import config
+    templates.env.globals.update(csrf_input=csrf_input, is_admin=is_admin, can_operate=can_operate, auth_enabled=lambda: config.AUTH_ENABLED)
     templates.env.globals["_"] = tr
     templates.env.globals["current_language"] = current_language
     templates.env.filters["human_status"] = human_status

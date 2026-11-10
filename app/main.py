@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -19,28 +19,36 @@ from app.database import Base, SessionLocal, engine
 from app.migrations import initialize_database
 from app.services.queue import enqueue_paths
 from app.services.file_workflow import check_pending_transfer, check_active_jobs, lock_file_operations, FileOperationError
-from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer
+from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
 from app.services.verdicts import recalculate_release_status
 from app.services.settings import workflow_settings
 from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
 from app.presentation import configure_templates
 from app.services.sources import seed_analysis_sources
-from app.version import APP_NAME, APP_VERSION
+from app.version import APP_NAME, APP_VERSION, APP_REVISION
+from app.security import security_middleware, check_csrf, require_admin_configured, router as security_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.services.locks import process_lock
     initialize_database(engine)
-    seed_analysis_sources()
-    yield
+    with process_lock("web"):
+        seed_analysis_sources()
+        require_admin_configured()
+        yield
 
 
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
     lifespan=lifespan,
+    dependencies=[Depends(check_csrf)],
 )
+
+app.middleware("http")(security_middleware)
+app.include_router(security_router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = configure_templates(Jinja2Templates(directory="app/templates"))
@@ -201,6 +209,7 @@ def dashboard(request: Request):
             name="dashboard.html",
             context={
                 "releases": releases,
+                "worker_health": __import__("app.health", fromlist=["worker_status"]).worker_status(),
                 "release_counters": release_counters,
                 "track_counters": track_counters,
                 "job_counters": job_counters,
@@ -307,6 +316,8 @@ def retry_analysis(job_id: int):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         job.status = "QUEUED"
         job.hidden = False
+        job.attempts = 0
+        job.next_run_at = None
         job.cancel_requested = False
         job.progress = job.progress_total = 0
         job.started_at = job.finished_at = None
@@ -605,6 +616,8 @@ def release_detail(request: Request, release_id: int):
             request=request,
             name="release.html",
             context={"release": release, "file_operations_enabled": workflow_settings()["enabled"],
+                     "reviews": list(session.scalars(select(ReviewEvent).where(ReviewEvent.release_id == release.id).order_by(ReviewEvent.id.desc()).limit(100))),
+                     "trash_entry": session.scalar(select(TrashEntry).where(TrashEntry.release_id == release.id, TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"}))),
                      "pending_transfer": session.scalar(select(FileTransfer.id).where(FileTransfer.release_id == release.id,
                                                                                    FileTransfer.state.not_in({"COMPLETE", "ABANDONED"})))},
         )
@@ -661,7 +674,7 @@ def track_spectrogram(track_id: int):
 
 
 @app.post("/tracks/{track_id}/review/{decision}")
-def review_track(track_id: int, decision: str):
+def review_track(request: Request, track_id: int, decision: str, note: str = Form("", max_length=2000)):
     decisions = {
         "approve": "APPROVED",
         "reject": "REJECTED",
@@ -696,7 +709,8 @@ def review_track(track_id: int, decision: str):
             check_active_jobs(session, Path(track.release.source_path))
         except FileOperationError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        track.human_review = decisions[decision]
+        from app.services.reviews import set_review
+        set_review(session, track, decisions[decision], note, getattr(request.state, "actor", "local"))
         recalculate_release_status(track.release)
         session.commit()
 
@@ -708,9 +722,17 @@ def review_track(track_id: int, decision: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": APP_VERSION}
+    return {"status": "ok", "version": APP_VERSION, "revision": APP_REVISION}
 
 
 from app.workflow import router as workflow_router
 
 app.include_router(workflow_router)
+
+from app.operations import router as operations_router
+app.include_router(operations_router)
+
+@app.get("/api/worker-health")
+def worker_health():
+    from app.health import worker_status
+    return worker_status()

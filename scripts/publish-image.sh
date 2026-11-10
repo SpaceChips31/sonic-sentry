@@ -8,13 +8,10 @@ fi
 
 version=$1
 
-case "$version" in
-    [0-9]*.[0-9]*.[0-9]*) ;;
-    *)
-        echo "VERSION must use the MAJOR.MINOR.PATCH form" >&2
-        exit 2
-        ;;
-esac
+if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "VERSION must use the MAJOR.MINOR.PATCH form" >&2
+    exit 2
+fi
 
 registry_image=${LOSSLESS_VALIDATOR_IMAGE:-ghcr.io/spacechips31/sonic-sentry}
 minor=${version%.*}
@@ -29,6 +26,8 @@ docker build \
     --tag "$registry_image:$minor" \
     --tag "$registry_image:latest" \
     .
+
+docker run --rm -i "$registry_image:$version" python - < scripts/smoke-container.py
 
 docker push "$registry_image:$version"
 docker push "$registry_image:$minor"

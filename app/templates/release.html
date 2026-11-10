@@ -10,16 +10,18 @@
 <article class="stat rejected"><span>{{ _('Automatic rejected') }}</span><strong>{{ release.rejected_tracks }}</strong></article>
 </section>
 <section class="panel release-actions"><div><p class="eyebrow">{{ _('Album workflow') }}</p><h2>{{ _('File actions') }}</h2><p>{{ _('File actions help') }}</p></div>
-{% if release.operations and release.operations[0].action == 'DELETE' %}<span class="badge rejected">{{ _('Files deleted') }}</span>
+{% if release.operations and release.operations[0].action in ['DELETE','PURGE_TRASH'] %}<span class="badge rejected">{{ _('Files deleted') }}</span>
 {% elif pending_transfer %}<a class="button secondary" href="/activity">{{ _('View unfinished transfer') }}</a>
+{% elif trash_entry %}<a class="button secondary" href="/destinations/trash">{{ _('Open trash') }}</a>
 {% elif not file_operations_enabled %}<a class="button secondary" href="/settings#automation">{{ _('Configure file operations') }}</a>
-{% else %}<form method="post" action="/releases/{{ release.id }}/files">
+{% else %}<form method="post" action="/releases/{{ release.id }}/files">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}>
 <button class="button success" name="action" value="manual-pass" type="submit" onclick='return confirm({{ _("Manual pass confirm")|tojson }})'>{{ _('Manual pass → staging') }}</button>
 <button class="button secondary" name="action" value="quarantine" type="submit" onclick='return confirm({{ _("Quarantine confirm")|tojson }})'>{{ _('Move to quarantine') }}</button>
-<button class="button danger" name="action" value="delete" type="submit" onclick='return confirm({{ _("Delete confirm")|tojson }})'>{{ _('Delete album files') }}</button>
-</form>{% endif %}</section>
-{% if release.operations %}<section class="panel operation-history"><h2>{{ _('File history') }}</h2>{% for operation in release.operations %}<div class="operation-row"><strong>{{ operation.action.replace('_', ' ') }}</strong><span>{{ operation.created_at }}</span><code>{{ operation.source_path }}{% if operation.destination_path %} → {{ operation.destination_path }}{% endif %}</code></div>{% endfor %}</section>{% endif %}
+<button class="button danger" name="action" value="delete" type="submit" onclick='return confirm({{ _("Move this album to the recoverable trash?")|tojson }})'>{{ _('Move to trash') }}</button>
+</fieldset></form>{% endif %}</section>
+{% if release.operations %}<section class="panel operation-history"><h2>{{ _('File history') }}</h2>{% for operation in release.operations %}<div class="operation-row"><strong>{{ _(operation.action) }}</strong><span>{{ operation.created_at }} · {{ operation.actor }}</span><code>{{ operation.source_path }}{% if operation.destination_path %} → {{ operation.destination_path }}{% endif %}</code></div>{% endfor %}</section>{% endif %}
 <section class="panel"><table><thead><tr><th>{{ _('Track') }}</th><th>{{ _('Integrity') }}</th><th>{{ _('Forensic verdict') }}</th><th>{{ _('Review') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
 {% for track in release.tracks %}<tr class="{% if track.status != 'PASS' %}attention{% endif %}"><td><a href="/tracks/{{ track.id }}">{{ track.display_path }}</a></td><td>{{ "PASS" if track.integrity_ok else "FAILED" }}</td><td><span class="verdict-label {{ track.forensic_verdict|verdict_tone }}">{{ track.forensic_verdict|human_verdict }}</span></td><td><span class="review-state {{ track.human_review|lower }}">{{ track.human_review|human_review }}</span></td><td><span class="badge {{ track.status|lower }}">{{ track.status|human_status }}</span></td></tr>{% endfor %}
 </tbody></table></section>
+<section class="panel settings-panel"><h2>{{ _('Review history') }}</h2>{% for event in reviews %}<article class="activity-row"><strong>{{ event.track_path }}</strong> · {{ event.previous|human_review }} → {{ event.decision|human_review }}<small>{{ event.created_at }} · {{ event.actor }}</small>{% if event.note %}<p>{{ event.note }}</p>{% endif %}</article>{% else %}<p>{{ _('No review decisions recorded yet.') }}</p>{% endfor %}</section>
 {% endblock %}

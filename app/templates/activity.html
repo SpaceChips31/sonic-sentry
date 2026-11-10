@@ -7,9 +7,9 @@
 <a href="/releases/{{ transfer.release_id }}">{{ _('Release') }} #{{ transfer.release_id }}</a> · <strong>{{ _(transfer.state) }}</strong>
 <code>{{ transfer.source_path }} → {{ transfer.destination_path }}</code>
 {% if transfer.error %}<p class="notice error">{{ transfer.error }}</p>{% endif %}
-{% if transfer.state not in ['COMPLETE','ABANDONED'] %}<form method="post" action="/activity/transfers/{{ transfer.id }}/resume"><button class="button secondary" type="submit">{{ _('Verify and resume') }}</button></form>{% endif %}
+{% if transfer.state not in ['COMPLETE','ABANDONED'] %}<form method="post" action="/activity/transfers/{{ transfer.id }}/resume">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Verify and resume') }}</button></fieldset></form>{% endif %}
 {% if transfer.state in ['NEEDS_ATTENTION','ABANDONED'] %}<code>{{ transfer.temporary_path }}</code>{% endif %}
-{% if transfer.state == 'NEEDS_ATTENTION' %}<form method="post" action="/activity/transfers/{{ transfer.id }}/close"><button class="button secondary" type="submit">{{ _('Close and keep all files') }}</button></form>{% endif %}
+{% if transfer.state == 'NEEDS_ATTENTION' %}<form method="post" action="/activity/transfers/{{ transfer.id }}/close">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Close and keep all files') }}</button></fieldset></form>{% endif %}
 </article>{% else %}<p class="group-empty">{{ _('No file transfers yet.') }}</p>{% endfor %}
 </section>
 <section class="panel activity-panel"><h2>{{ _('Watched albums') }}</h2>
