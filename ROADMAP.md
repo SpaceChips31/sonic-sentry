@@ -1,5 +1,11 @@
 # SonicSentry roadmap
 
+## Delivered in 0.3.1
+
+- Recursive FLAC-only folder lists with destination diagnostics toggle
+- Bulk quarantine-to-staging with explicit optional approval and per-album results
+- Verified portable publication for filesystems without exclusive atomic rename
+
 ## Delivered in 0.3
 
 - Physical destination inventory, independent of analysis verdict

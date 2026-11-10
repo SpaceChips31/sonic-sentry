@@ -61,12 +61,19 @@ with tempfile.TemporaryDirectory() as temporary:
     from app.maintenance import export_backup
     release_id = release.id
     original = Path(release.source_path)
+    from app.services import file_workflow
+    import errno
+    native_rename = file_workflow.rename_exclusive
+    def unsupported_rename(*args):
+        raise OSError(errno.EINVAL, "simulated filesystem without exclusive rename")
+    file_workflow.rename_exclusive = unsupported_rename
     delete_release_files(release_id)
     with SessionLocal() as session:
         entry = session.scalar(select(TrashEntry))
         assert entry.state == "TRASHED" and not original.exists()
         entry_id = entry.id
     restore_trash(entry_id)
+    file_workflow.rename_exclusive = native_rename
     assert (original / "track.flac").is_file()
     export_backup(root / "metadata.zip")
     import time

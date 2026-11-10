@@ -74,3 +74,18 @@ def same_content(actual: dict, expected: dict) -> bool:
         actual[name]["size"] == expected[name]["size"] and actual[name]["sha256"] == expected[name]["sha256"]
         for name in expected
     )
+
+
+def contains_flac(root: Path) -> bool:
+    """Short-circuit recursive check, without following links or hidden work folders."""
+    if not root.is_dir() or root.is_symlink() or (hasattr(root, "is_junction") and root.is_junction()):
+        return False
+    for current, directories, filenames in os.walk(root, followlinks=False):
+        directory = Path(current)
+        directories[:] = [name for name in directories if not name.startswith(".")
+            and not (directory / name).is_symlink()
+            and not (hasattr(directory / name, "is_junction") and (directory / name).is_junction())]
+        if any(Path(name).suffix.lower() == ".flac" and (directory / name).is_file()
+               and not (directory / name).is_symlink() for name in filenames):
+            return True
+    return False

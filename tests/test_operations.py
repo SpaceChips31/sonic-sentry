@@ -118,12 +118,13 @@ def test_inventory_distinguishes_physical_location_from_quality(setup):
     file_workflow.move_release(release.id, "QUARANTINE")
     unknown = setup.root / "quarantine" / "Unregistered"
     unknown.mkdir()
+    (unknown / "track.FLAC").write_bytes(b"audio")
     data = inventory.destination_inventory("quarantine")
     assert any(row["release"] and row["release"].status == "PASS" for row in data["rows"])
     assert any(row["name"] == "Unregistered" and not row["release"] for row in data["rows"])
     (setup.root / "quarantine" / "Album" / "track.flac").unlink()
     (setup.root / "quarantine" / "Album").rmdir()
-    assert any(row["release"] and not row["exists"] for row in inventory.destination_inventory("quarantine")["rows"])
+    assert any(row["release"] and not row["exists"] for row in inventory.destination_inventory("quarantine", show_all=True)["rows"])
     with TestClient(main.app) as client:
         assert client.get("/destinations/quarantine").status_code == 200
 
@@ -216,6 +217,7 @@ def test_optional_auth_roles_are_enforced_on_server(setup, monkeypatch, role, qu
         assert client.post("/analyses/999/cancel").status_code == queue_status
         if role != "admin":
             assert client.post("/trash/unknown/purge", data={"confirmation":"ELIMINA"}).status_code == 403
+        assert client.post("/destinations/quarantine/staging", data={"release_ids":[999],"mode":"approved"}).status_code == (403 if role == "viewer" else 409)
         assert client.post("/logout", follow_redirects=False).status_code == 303
         assert client.get("/", follow_redirects=False).status_code == 303
 

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Staging transfer results') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="page-heading"><div><h1>{{ _('Staging transfer results') }}</h1><p>{{ moved }} / {{ total }} {{ _('albums moved') }}</p><p>{{ _('Each album is handled separately. Failed albums retain their files; inspect Activity for unfinished transfers.') }}</p></div><a class="button secondary" href="/destinations/quarantine">{{ _('Back to quarantine') }}</a></section>
+<section class="panel table-scroll"><table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Result') }}</th><th>{{ _('Details') }}</th></tr></thead><tbody>{% for row in results %}<tr><td><a href="/releases/{{ row.id }}">{{ row.title }}</a></td><td><span class="badge {{ 'pass' if row.ok else 'rejected' }}">{{ _('Moved') if row.ok else _('Not moved') }}</span></td><td>{{ row.detail }}</td></tr>{% endfor %}</tbody></table></section><p><a href="/activity">{{ _('Activity') }}</a></p>
+{% endblock %}

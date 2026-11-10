@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import json
 import os
+import errno
 from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.models import AnalysisJob, Release, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
-from app.services.files import MARKER, snapshot, same_content, file_digest, album_files
+from app.services.files import MARKER, snapshot, same_content, file_digest, album_files, contains_flac
 from app.services.locks import process_lock
 from app.services.settings import workflow_settings
 from app.services.verdicts import recalculate_release_status
@@ -140,7 +141,9 @@ def rename_exclusive(source: Path, destination: Path) -> None:
     import ctypes
     libc = ctypes.CDLL(None, use_errno=True)
     if not hasattr(libc, "renameat2"):
-        raise FileOperationError("Atomic exclusive directory rename is unavailable")
+        raise OSError(errno.ENOSYS, "Atomic exclusive directory rename is unavailable", str(destination))
+    libc.renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    libc.renameat2.restype = ctypes.c_int
     result = libc.renameat2(-100, os.fsencode(source), -100, os.fsencode(destination), 1)
     if result:
         number = ctypes.get_errno()
@@ -163,6 +166,58 @@ def owned_directory(path: Path, transfer_id: str) -> bool:
             and not (hasattr(path, "is_junction") and path.is_junction())
             and (path / MARKER).is_file()
             and (path / MARKER).read_text(encoding="utf-8") == transfer_id)
+
+
+def portable_publish(temporary: Path, destination: Path, source: Path, expected: dict, transfer_id: str):
+    """Exclusive destination reservation for filesystems without RENAME_NOREPLACE.
+
+    Files become visible incrementally; originals are retained until complete verification.
+    Existing unknown/modified files are never overwritten, including after interruption.
+    """
+    if not owned_directory(temporary, transfer_id) or not same_content(snapshot(temporary, hashes=True), expected):
+        raise FileOperationError("temporary contents cannot be verified for portable publication")
+    if not same_content(snapshot(source, hashes=True), expected):
+        raise FileOperationError("source changed before portable publication")
+    if not destination.exists():
+        destination.mkdir()  # Atomic reservation; never adopts another directory.
+        with (destination / MARKER).open("x", encoding="utf-8") as marker:
+            marker.write(transfer_id)
+    if not owned_directory(destination, transfer_id):
+        raise FileOperationError("destination ownership cannot be verified")
+    actual = snapshot(destination, hashes=True)
+    if any(name not in expected or value["sha256"] != expected[name]["sha256"] for name, value in actual.items()):
+        raise FileOperationError("portable destination contains changed or added files; all copies were preserved")
+    missing = [name for name in expected if name not in actual]
+    if shutil.disk_usage(destination.parent).free < sum(expected[name]["size"] for name in missing):
+        raise FileOperationError("not enough free space for portable publication; all copies were preserved")
+    for name in missing:
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with (temporary / name).open("rb") as input_file, target.open("xb") as output_file:
+            shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
+        shutil.copystat(temporary / name, target)
+    if not same_content(snapshot(destination, hashes=True), expected):
+        raise FileOperationError("portable destination failed verification; all copies were preserved")
+
+
+def cleanup_verified_copy(path: Path, expected: dict, transfer_id: str):
+    if not path.exists():
+        return
+    if not owned_directory(path, transfer_id):
+        raise FileOperationError("temporary directory ownership cannot be verified during cleanup")
+    remaining = snapshot(path, hashes=True)
+    if any(name not in expected or value["sha256"] != expected[name]["sha256"] for name, value in remaining.items()):
+        raise FileOperationError("temporary directory contains changed or added files; copies were preserved")
+    for file in album_files(path):
+        if file_digest(file) != expected[file.relative_to(path).as_posix()]["sha256"]:
+            raise FileOperationError("temporary file changed during cleanup")
+        file.unlink()
+    # Keep the ownership marker until all regular files and nested directories are gone.
+    for directory, _, _ in os.walk(path, topdown=False):
+        if Path(directory) != path:
+            Path(directory).rmdir()
+    (path / MARKER).unlink()
+    path.rmdir()
 
 
 def run_transfer(transfer_id: str) -> Path:
@@ -196,7 +251,14 @@ def run_transfer(transfer_id: str) -> Path:
                 raise FileOperationError("copied files failed verification")
             if not same_content(snapshot(source, hashes=True), expected):
                 raise FileOperationError("source changed during the transfer")
-            rename_exclusive(temporary, destination)
+            try:
+                rename_exclusive(temporary, destination)
+            except OSError as exc:
+                if exc.errno not in {errno.EINVAL, errno.ENOSYS, errno.EOPNOTSUPP, errno.ENOTSUP}:
+                    raise
+                portable_publish(temporary, destination, source, expected, transfer_id)
+        elif owned_directory(destination, transfer_id) and not same_content(snapshot(destination, hashes=True), expected):
+            portable_publish(temporary, destination, source, expected, transfer_id)
         if not owned_directory(destination, transfer_id) or not same_content(snapshot(destination, hashes=True), expected):
             raise FileOperationError("destination ownership or contents cannot be verified")
 
@@ -225,6 +287,8 @@ def run_transfer(transfer_id: str) -> Path:
             current.state, current.error = "CLEANUP", None
             session.commit()
 
+        cleanup_verified_copy(temporary, expected, transfer_id)
+
         # On restart the source may be partially cleaned. Never remove changed or added files.
         if source.exists():
             remaining = snapshot(source, hashes=True)
@@ -248,7 +312,8 @@ def run_transfer(transfer_id: str) -> Path:
 
 
 def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False,
-                 current_job_id: int | None = None, trash_entry_id: str | None = None, actor: str = "local") -> Path:
+                 current_job_id: int | None = None, trash_entry_id: str | None = None, actor: str = "local",
+                 expected_source_root: Path | None = None) -> Path:
     normalized = target_kind.upper()
     settings = workflow_settings()
     try:
@@ -260,6 +325,8 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 check_pending_transfer(session, release_id)
                 source = validate_source(Path(release.source_path), settings, allow_managed=True)
                 check_active_jobs(session, source, current_job_id)
+                if expected_source_root is not None and (not is_within(source, (expected_source_root,)) or not contains_flac(source)):
+                    raise FileOperationError("album is no longer a FLAC folder in quarantine")
                 active_trash = session.scalar(select(TrashEntry).where(TrashEntry.release_id == release_id,
                     TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"})))
                 if active_trash and normalized != "RESTORE":

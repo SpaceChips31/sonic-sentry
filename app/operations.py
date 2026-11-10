@@ -8,7 +8,9 @@ from fastapi.templating import Jinja2Templates
 from app.presentation import configure_templates
 from app.services.inventory import KINDS, destination_inventory
 from app.services.settings import workflow_settings, save_operational_settings, WorkflowConfigurationError
-from app.services.file_workflow import FileOperationError, is_within
+from app.services.file_workflow import FileOperationError, is_within, move_release
+from app.database import SessionLocal
+from app.models import Release
 from app.services.batch import discover_releases, BatchDiscoveryError
 from app.services.queue import enqueue_paths
 from app.services.trash import restore_trash, purge_trash
@@ -41,9 +43,9 @@ def download_backup():
 
 
 @router.get("/destinations/{kind}", response_class=HTMLResponse)
-def destinations(request: Request, kind: str, q: str = "", page: int = 1):
+def destinations(request: Request, kind: str, q: str = "", page: int = 1, show_all: bool = False):
     try:
-        data = destination_inventory(kind, q)
+        data = destination_inventory(kind, q, show_all=show_all)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     total = len(data["rows"])
@@ -52,6 +54,30 @@ def destinations(request: Request, kind: str, q: str = "", page: int = 1):
     data.update(rows=data["rows"][(page-1)*50:page*50], page=page, pages=pages, total=total,
                 kinds=KINDS, settings=workflow_settings())
     return templates.TemplateResponse(request=request, name="destinations.html", context=data)
+
+
+@router.post("/destinations/quarantine/staging", response_class=HTMLResponse)
+def bulk_staging(request: Request, release_ids: list[int] = Form(...), mode: str = Form(...)):
+    selected = list(dict.fromkeys(release_ids))
+    if mode not in {"approved", "approve"} or not 1 <= len(release_ids) <= 50:
+        raise HTTPException(status_code=400, detail="Select between 1 and 50 albums and a valid staging action")
+    settings = workflow_settings()
+    if not settings["enabled"] or settings["locked"] or not settings["quarantine"]:
+        raise HTTPException(status_code=409, detail="File operations are disabled or quarantine is not configured")
+    root = Path(settings["quarantine"]).resolve()
+    results = []
+    for release_id in selected:
+        with SessionLocal() as session:
+            release = session.get(Release, release_id)
+            title = release.title if release else str(release_id)
+        try:
+            destination = move_release(release_id, "STAGING", manual_pass=mode == "approve",
+                actor=getattr(request.state, "actor", "local"), expected_source_root=root)
+            results.append({"id": release_id, "title": title, "ok": True, "detail": str(destination)})
+        except FileOperationError as exc:
+            results.append({"id": release_id, "title": title, "ok": False, "detail": str(exc)})
+    return templates.TemplateResponse(request=request, name="bulk_staging.html", context={
+        "results": results, "moved": sum(row["ok"] for row in results), "total": len(results)})
 
 
 @router.post("/destinations/{kind}/analyze")
