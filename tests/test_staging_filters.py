@@ -71,6 +71,7 @@ def test_bulk_approval_moves_multiple_albums_and_audits_actor(setup):
         response = client.post("/destinations/quarantine/staging", data={"release_ids":[a.id for a in albums],"mode":"approve"})
         assert response.status_code == 200
         assert "2 / 2" in response.text
+        assert ">One</a>" in response.text and ">Two</a>" in response.text
     for album in albums:
         assert (setup.root / "staging" / album.title / "track.flac").is_file()
     with setup.db() as session:
