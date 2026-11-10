@@ -4,6 +4,23 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Show folders without FLAC and missing paths": "Mostra anche cartelle senza FLAC e percorsi mancanti",
+    "Select albums on this page. Manual approval overrides uncertain verdicts; integrity failures stay blocked.": "Seleziona gli album di questa pagina. L’approvazione manuale supera gli esiti incerti; gli errori d’integrità restano bloccati.",
+    "selected": "selezionati",
+    "Move approved albums to staging": "Sposta gli approvati in staging",
+    "Approve and move to staging": "Approva e sposta in staging",
+    "Approve the selected albums manually and move them to staging? Integrity failures cannot be approved.": "Approvare manualmente gli album selezionati e spostarli in staging? Gli errori d’integrità non possono essere approvati.",
+    "File operations are disabled.": "Le operazioni sui file sono disattivate.",
+    "Select all albums on this page": "Seleziona tutti gli album di questa pagina",
+    "Staging transfer results": "Esito dei trasferimenti in staging",
+    "albums moved": "album spostati",
+    "Each album is handled separately. Failed albums retain their files; inspect Activity for unfinished transfers.": "Ogni album viene gestito separatamente. I file degli album non spostati vengono conservati; controlla Attività per i trasferimenti incompleti.",
+    "Back to quarantine": "Torna alla quarantena",
+    "Result": "Esito",
+    "Moved": "Spostato",
+    "Not moved": "Non spostato",
+    "Only folders containing FLAC files are shown, including nested albums and discs.": "Sono mostrate solo cartelle contenenti FLAC, anche negli album e nei dischi delle sottocartelle.",
+
     "Move this album to the recoverable trash?": "Spostare questo album nel cestino recuperabile?",
     "Picard staging": "Preparazione Picard",
     "Destination folder is missing or not configured": "La cartella di destinazione non esiste o non è configurata",

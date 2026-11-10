@@ -5,13 +5,14 @@ from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import Release, TrashEntry
+from app.services.files import contains_flac
 from app.services.settings import workflow_settings
 
 
 KINDS = {"quarantine": "Quarantine", "rejected": "Rejected", "staging": "Picard staging", "trash": "Trash"}
 
 
-def destination_inventory(kind: str, query: str = "") -> dict:
+def destination_inventory(kind: str, query: str = "", *, show_all: bool = False) -> dict:
     if kind not in KINDS:
         raise ValueError("Unknown destination")
     value = workflow_settings()[kind]
@@ -43,8 +44,10 @@ def destination_inventory(kind: str, query: str = "") -> dict:
         if belongs or kind == "trash" and entry:
             row = rows.setdefault(str(path), {"path": str(path), "name": release.title, "exists": path.is_dir()})
             row.update(release=release, entry=entry)
+    if not show_all:
+        rows = {key: row for key, row in rows.items() if contains_flac(Path(row["path"]))}
     values = sorted(rows.values(), key=lambda row: row["name"].casefold())
     if query.strip():
         values = [row for row in values if query.casefold().strip() in f'{row["name"]} {row["path"]}'.casefold()]
     return {"root": str(root) if root else "", "rows": values, "warning": warning, "kind": kind,
-            "title": KINDS[kind], "query": query}
+            "title": KINDS[kind], "query": query, "show_all": show_all}

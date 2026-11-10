@@ -18,6 +18,7 @@ from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import Base, SessionLocal, engine
 from app.migrations import initialize_database
 from app.services.queue import enqueue_paths
+from app.services.files import contains_flac
 from app.services.file_workflow import check_pending_transfer, check_active_jobs, lock_file_operations, FileOperationError
 from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
 from app.services.verdicts import recalculate_release_status
@@ -380,7 +381,7 @@ def new_analysis(
             parent_path = "" if parent == Path(".") else str(parent)
 
         entries = sorted(
-            (item for item in current.iterdir() if item.is_dir()),
+            (item for item in current.iterdir() if not item.name.startswith(".") and contains_flac(item)),
             key=lambda item: item.name.casefold(),
         )
         if query:
@@ -427,7 +428,7 @@ def source_directories(
     query = q.strip().casefold()
 
     entries = sorted(
-        (item for item in current.iterdir() if item.is_dir()),
+        (item for item in current.iterdir() if not item.name.startswith(".") and contains_flac(item)),
         key=lambda item: item.name.casefold(),
     )
     if query:

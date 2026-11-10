@@ -691,3 +691,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .main-nav { flex-wrap: wrap; }
 .review-actions label, .activity-row small { display: block; color: var(--muted); }
 .review-actions textarea { display: block; width: 200px; }
+
+.bulk-staging-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.bulk-staging-actions #staging-count { margin-right:8px; }
+.release-filter label.checkbox-label { display:flex; flex-direction:row; align-items:center; gap:8px; }
+.release-filter .checkbox-label input { width:auto; flex:none; }

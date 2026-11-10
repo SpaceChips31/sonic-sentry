@@ -54,7 +54,7 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.3.0`), the minor release
+Available release tags include the exact version (`0.3.1`), the minor release
 (`0.3`), and `latest`. Production deployments should prefer the exact
 version.
 
@@ -173,10 +173,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.3.0:
+For SonicSentry 0.3.1:
 
 ```env
-SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.3.0
+SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.3.1
 ```
 
 ## Local development
@@ -189,9 +189,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.3.0` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.3.1` runs the GitHub Actions
 publication workflow. It tests, builds and smoke-tests the image before publishing the corresponding
-`0.3.0`, `0.3`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
+`0.3.1`, `0.3`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -260,7 +260,7 @@ are consumed by Compose. Web and Worker must share identical settings and mounts
 
 | Variable | Default / purpose |
 | --- | --- |
-| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.3.0` |
+| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.3.1` |
 | `PUID`, `PGID` | `1000`, `1000`; UID/GID for writable mounts |
 | `LOSSLESS_VALIDATOR_PORT` | `8090`; host Web port |
 | `MEDIA_ROOT` | `/mnt/media`; host folder mounted at `/data` |
@@ -334,3 +334,28 @@ disables folder watching, cancels pending analyses and pauses unfinished transfe
 Reconcile physical paths before resuming anything: metadata cannot restore missing
 audio. The CLI supports only a SQLite database directly in the configured data folder.
 Do not downgrade after upgrading; preserve a pre-upgrade backup of data and media.
+
+## FLAC filtering and bulk staging (0.3.1)
+
+The source browser and destination lists hide folders without FLAC by default.
+The check is case-insensitive and recursive, retaining artist and multi-disc parents.
+Hidden work directories and linked directories are excluded. Destination lists offer
+**Show folders without FLAC and missing paths** for diagnostics; this does not modify files.
+
+In **Destinations > Quarantine**, select up to 50 registered albums on the current page.
+**Move approved albums to staging** preserves review decisions and moves only PASS albums.
+**Approve and move to staging** explicitly approves uncertain tracks before staging,
+with confirmation and audit entries. Integrity failures, active analyses, unfinished
+transfers and occupied destinations remain blocked. Each album has its own journal;
+the results page reports successes and failures separately. Albums outside physical
+quarantine cannot be moved by this batch action. Analyze unregistered albums first.
+
+On filesystems where exclusive atomic rename fails with EINVAL/ENOSYS/EOPNOTSUPP,
+publication reserves a new destination directory exclusively and copies verified files
+without overwriting existing ones. The destination can be visible incrementally and
+carries `.sonic-sentry-transfer` until complete; other tools should wait for that marker
+to disappear. This fallback can require space for a second extra album copy. Originals
+and the hidden temporary copy remain until destination verification succeeds. Unknown,
+changed or partially written destination files stop recovery for inspection. Existing
+failed journals can use **Activity > Verify and resume** after upgrading. The application
+does not automatically resume transfers marked NEEDS_ATTENTION.
