@@ -40,6 +40,21 @@ def _acl(path: Path, required: str):
         subprocess.run(["setfacl","-m",f"g::{required},m::{required}","--",str(path)],capture_output=True,text=True,check=True)
 
 
+def _default_acl(path: Path):
+    try:
+        os.getxattr(path,"system.posix_acl_default",follow_symlinks=False)
+    except AttributeError:
+        return
+    except OSError as exc:
+        if exc.errno in {errno.ENODATA,errno.ENOTSUP,errno.EOPNOTSUPP}:
+            return
+        raise
+    result=subprocess.run(["getfacl","-cp","--",str(path)],capture_output=True,text=True,check=True)
+    entries={line.split(":",3)[1]:line.split(":",3)[3].split()[0] for line in result.stdout.splitlines() if line.startswith(("default:group::","default:mask::"))}
+    if entries.get("group")!="rwx" or entries.get("mask")!="rwx":
+        subprocess.run(["setfacl","-m","d:g::rwx,d:m::rwx","--",str(path)],capture_output=True,text=True,check=True)
+
+
 def apply_permissions(path: Path, gid: int | None, *, directory: bool):
     if os.name != "posix":
         return
@@ -53,6 +68,8 @@ def apply_permissions(path: Path, gid: int | None, *, directory: bool):
         if stat.S_IMODE(path.stat().st_mode)!=mode:
             path.chmod(mode)
         _acl(path,"rwx" if directory else "rw-")
+        if directory:
+            _default_acl(path)
         actual=path.stat()
         if actual.st_gid!=gid or stat.S_IMODE(actual.st_mode)!=mode:
             raise PermissionError("filesystem did not retain the requested group/mode")

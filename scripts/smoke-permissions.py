@@ -69,6 +69,9 @@ subprocess.run(['flac','--silent','--test',str(track)],check=True)
 (folder/'CD1').rename(folder/'Disc 1')
 (folder/'Picard created').mkdir()
 assert (folder/'Picard created').stat().st_gid==110000
+assert (folder/'Picard created').stat().st_mode & 0o770==0o770
+(folder/'Picard created'/'new.txt').write_bytes(b'shared')
+assert (folder/'Picard created'/'new.txt').stat().st_mode & 0o660==0o660
 assert (folder/'Disc 1'/'track.flac').stat().st_gid==110000
 print('Separate Picard UID read, tagged, traversed and renamed successfully',flush=True)
 """

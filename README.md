@@ -443,6 +443,7 @@ policy; existing ancestors outside the configured output root remain untouched.
 
 On Linux, named ACL entries inherited from the destination are retained. If needed,
 the owning-group ACL entry and mask are corrected so media permissions are effective.
+Existing default ACLs also retain media group access for files/directories created later.
 Source ACLs and other source extended attributes are not cloned. Modes/group are
 verified before database hand-off and before source cleanup, for native publication,
 portable publication and resumed transfers. If group assignment, ACL adjustment or
