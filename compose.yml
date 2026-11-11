@@ -3,6 +3,8 @@ name: sonic-sentry
 x-app: &app
   image: "${SONIC_IMAGE:-ghcr.io/spacechips31/sonic-sentry:latest}"
   user: "${PUID:-1000}:${PGID:-1000}"
+  group_add:
+    - "${SONIC_MEDIA_GID:-${PGID:-1000}}"
   init: true
   restart: unless-stopped
   security_opt:
@@ -14,6 +16,7 @@ x-app: &app
     LOSSLESS_SOURCE_ROOTS: "${LOSSLESS_SOURCE_ROOTS:-/data/downloads/soulseek:/data/music/legacy}"
     SONIC_FILE_OPERATIONS_LOCKED: "${SONIC_FILE_OPERATIONS_LOCKED:-false}"
     SONIC_AUTH_ENABLED: "${SONIC_AUTH_ENABLED:-false}"
+    SONIC_MEDIA_GID: "${SONIC_MEDIA_GID:-}"
     SONIC_COOKIE_SECURE: "${SONIC_COOKIE_SECURE:-false}"
     LOSSLESS_FILE_OPERATIONS: "${LOSSLESS_FILE_OPERATIONS:-false}"
     LOSSLESS_AUTO_ROUTE: "${LOSSLESS_AUTO_ROUTE:-false}"

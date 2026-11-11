@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.database import SessionLocal
 from app.models import Release, FileBatch, FileTask, FileTransfer
 from app.security import sign
+from app.services.permissions import probe_permissions
 from app.services.files import snapshot, fingerprint, contains_flac, album_files
 from app.services.settings import workflow_settings
 from app.services.file_workflow import (FileOperationError, validate_source, configured_target, is_within,
@@ -46,6 +47,8 @@ def preflight(release_ids, mode):
                     raise FileOperationError("destination already exists; refusing to overwrite")
                 if not destination.parent.is_dir():
                     raise FileOperationError("staging directory is missing")
+                shared_gid=probe_permissions(destination.parent)
+                row["media_gid"]=shared_gid
                 with tempfile.TemporaryFile(dir=destination.parent):
                     pass
                 with tempfile.TemporaryFile(dir=source):

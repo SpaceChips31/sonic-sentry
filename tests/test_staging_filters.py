@@ -148,16 +148,16 @@ def test_portable_fallback_resumes_partial_publication(setup, monkeypatch):
     release = importer.import_report(report(setup))
     (setup.inbox / "Album" / "cover.jpg").write_bytes(b"cover")
     monkeypatch.setattr(file_workflow, "rename_exclusive", unsupported)
-    original = file_workflow.shutil.copystat
+    original = file_workflow.finish_copied_file
     def crash(source, destination, *args, **kwargs):
         result = original(source, destination, *args, **kwargs)
         if Path(destination) == setup.root / "staging" / "Album" / "cover.jpg":
             raise SystemExit("power loss")
         return result
-    monkeypatch.setattr(file_workflow.shutil, "copystat", crash)
+    monkeypatch.setattr(file_workflow, "finish_copied_file", crash)
     with pytest.raises(SystemExit):
         file_workflow.move_release(release.id, "STAGING")
-    monkeypatch.setattr(file_workflow.shutil, "copystat", original)
+    monkeypatch.setattr(file_workflow, "finish_copied_file", original)
     with setup.db() as session:
         transfer = session.scalar(select(FileTransfer))
     assert (setup.inbox / "Album" / "track.flac").exists()
@@ -184,16 +184,16 @@ def test_portable_resume_preserves_modified_destination_and_all_source_files(set
     configure(setup)
     release = importer.import_report(report(setup))
     monkeypatch.setattr(file_workflow, "rename_exclusive", unsupported)
-    original = file_workflow.shutil.copystat
+    original = file_workflow.finish_copied_file
     def crash(source, destination, *args, **kwargs):
         result = original(source, destination, *args, **kwargs)
         if Path(destination) == setup.root / "staging" / "Album" / "track.flac":
             raise SystemExit("power loss")
         return result
-    monkeypatch.setattr(file_workflow.shutil, "copystat", crash)
+    monkeypatch.setattr(file_workflow, "finish_copied_file", crash)
     with pytest.raises(SystemExit):
         file_workflow.move_release(release.id, "STAGING")
-    monkeypatch.setattr(file_workflow.shutil, "copystat", original)
+    monkeypatch.setattr(file_workflow, "finish_copied_file", original)
     changed = setup.root / "staging" / "Album" / "track.flac"
     changed.write_bytes(b"new user contents")
     with setup.db() as session:

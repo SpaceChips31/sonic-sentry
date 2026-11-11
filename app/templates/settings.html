@@ -73,6 +73,7 @@
 </fieldset></form><p><a href="/activity">{{ _('View ingestion and transfer activity') }}</a></p>
 {% for source in sources %}{% if source.watch_enabled %}<div class="settings-row"><span>{{ source.name }} — {{ _('Watching') if source.enabled else _('Disabled') }}</span><span>{{ source.last_scan_at or '—' }}</span></div>{% if source.watch_error %}<p class="notice error">{{ source.watch_error }}</p>{% endif %}{% endif %}{% endfor %}
 </section>
+<section class="panel settings-panel"><h2>{{ _('Shared destination permissions') }}</h2><p>{{ _('Transferred files use 0664 and directories use 2775. SONIC_MEDIA_GID selects the numeric host group; otherwise the destination group is used. Originals are retained if permissions cannot be applied.') }}</p></section>
 <section class="panel settings-panel" id="operations"><h2>{{ _('Analysis limits and retention') }}</h2><p>{{ _('Retries apply only to timeouts and transient system errors. Cleanup is manual and the trash is never emptied automatically.') }}</p>
 <form class="workflow-form" method="post" action="/settings/operations">{{ csrf_input() }}<fieldset class="permission-fields" {% if not is_admin() %}disabled{% endif %}>
 <label>{{ _('Total analysis timeout (seconds)') }}<input type="number" name="analysis_timeout" min="30" max="604800" value="{{ workflow.analysis_timeout }}" required></label>

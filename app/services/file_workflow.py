@@ -17,6 +17,7 @@ from app.services.files import MARKER, snapshot, same_content, file_digest, albu
 from app.services.locks import process_lock
 from app.services.settings import workflow_settings
 from app.services.verdicts import recalculate_release_status
+from app.services.permissions import media_gid, apply_permissions, ensure_directory, prepare_root, create_output_root
 
 
 class FileOperationError(RuntimeError):
@@ -70,7 +71,7 @@ def destination_for(source: Path, kind: str, settings: dict, *, basename: str | 
     root = configured_target(kind, settings)
     if root.is_relative_to(source):
         raise FileOperationError("destination cannot be inside the source album")
-    root.mkdir(parents=True, exist_ok=True)
+    create_output_root(root)
     destination = (root / (basename or source.name)).resolve()
 
     if destination == source or source.is_relative_to(destination):
@@ -181,6 +182,55 @@ def owned_directory(path: Path, transfer_id: str) -> bool:
             and (path / MARKER).read_text(encoding="utf-8") == transfer_id)
 
 
+def finish_copied_file(source: Path, destination: Path, gid: int | None):
+    info=Path(source).stat()
+    os.utime(destination,ns=(info.st_atime_ns,info.st_mtime_ns))
+    apply_permissions(Path(destination),gid,directory=False)
+
+
+def normalize_owned_copy(path: Path, transfer_id: str, expected: dict, gid: int | None):
+    if not owned_directory(path,transfer_id):
+        raise FileOperationError("destination ownership cannot be verified before setting permissions")
+    apply_permissions(path,gid,directory=True)
+    # Enumerate top-down so legacy private subdirectories become traversable first.
+    for current,directories,filenames in os.walk(path,followlinks=False):
+        folder=Path(current)
+        relative=folder.relative_to(path)
+        for name in directories:
+            child=folder/name
+            prefix=(relative/name).as_posix()+"/"
+            if not any(key.startswith(prefix) for key in expected):
+                # Empty directories are harmless, but no recursive changes to unknown content.
+                if child.is_symlink() or any(album_files(child)):
+                    raise FileOperationError("unknown temporary directory; files preserved")
+            apply_permissions(child,gid,directory=True)
+        for name in filenames:
+            file=folder/name
+            if name==MARKER and folder==path:
+                continue
+            if file.relative_to(path).as_posix() not in expected:
+                raise FileOperationError("unknown destination file; files preserved")
+            apply_permissions(file,gid,directory=False)
+
+
+def copy_verified_tree(source: Path, temporary: Path, expected: dict, transfer_id: str, gid: int | None):
+    normalize_owned_copy(temporary,transfer_id,expected,gid)
+    for current,directories,_ in os.walk(source,followlinks=False):
+        for name in directories:
+            ensure_directory(temporary/(Path(current)/name).relative_to(source),temporary,gid)
+    total=sum(item["size"] for item in expected.values())
+    done=0
+    update_transfer_progress(transfer_id,0,total)
+    for file in album_files(source):
+        target=temporary/file.relative_to(source)
+        ensure_directory(target.parent,temporary,gid)
+        # Byte copy only: copy2/copytree would restore restrictive source modes/ACLs.
+        shutil.copyfile(file,target,follow_symlinks=False)
+        finish_copied_file(file,target,gid)
+        done+=expected[file.relative_to(source).as_posix()]["size"]
+        update_transfer_progress(transfer_id,done,total)
+
+
 def portable_publish(temporary: Path, destination: Path, source: Path, expected: dict, transfer_id: str):
     """Exclusive destination reservation for filesystems without RENAME_NOREPLACE.
 
@@ -197,6 +247,8 @@ def portable_publish(temporary: Path, destination: Path, source: Path, expected:
             marker.write(transfer_id)
     if not owned_directory(destination, transfer_id):
         raise FileOperationError("destination ownership cannot be verified")
+    gid=media_gid(destination.parent)
+    normalize_owned_copy(destination,transfer_id,expected,gid)
     actual = snapshot(destination, hashes=True)
     if any(name not in expected or value["sha256"] != expected[name]["sha256"] for name, value in actual.items()):
         raise FileOperationError("portable destination contains changed or added files; all copies were preserved")
@@ -208,10 +260,10 @@ def portable_publish(temporary: Path, destination: Path, source: Path, expected:
     update_transfer_progress(transfer_id, done, total)
     for name in missing:
         target = destination / name
-        target.parent.mkdir(parents=True, exist_ok=True)
+        ensure_directory(target.parent,destination,gid)
         with (temporary / name).open("rb") as input_file, target.open("xb") as output_file:
             shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
-        shutil.copystat(temporary / name, target)
+        finish_copied_file(temporary / name,target,gid)
         done += expected[name]["size"]
         update_transfer_progress(transfer_id, done, total)
     if not same_content(snapshot(destination, hashes=True), expected):
@@ -255,6 +307,8 @@ def run_transfer(transfer_id: str) -> Path:
         if transfer.state == "ABANDONED":
             raise FileOperationError("this transfer was closed; start a new album action instead")
     try:
+        gid=media_gid(destination.parent)
+        prepare_root(destination.parent,gid,workflow_settings())
         if not destination.exists():
             if not source.is_dir() or not same_content(snapshot(source, hashes=True), expected):
                 raise FileOperationError("source changed since the transfer started")
@@ -264,17 +318,7 @@ def run_transfer(transfer_id: str) -> Path:
             if not owned_directory(temporary, transfer_id):
                 raise FileOperationError("temporary directory ownership cannot be verified")
             transfer_state(transfer_id, "COPYING")
-            total = sum(item["size"] for item in expected.values())
-            done = 0
-            update_transfer_progress(transfer_id, done, total)
-            def copy_progress(input_path, output_path):
-                nonlocal done
-                result = shutil.copy2(input_path, output_path)
-                if Path(input_path).name != MARKER:
-                    done += Path(input_path).stat().st_size
-                    update_transfer_progress(transfer_id, done, total)
-                return result
-            shutil.copytree(source, temporary, dirs_exist_ok=True, symlinks=True, copy_function=copy_progress)
+            copy_verified_tree(source,temporary,expected,transfer_id,gid)
             if not same_content(snapshot(temporary, hashes=True), expected):
                 raise FileOperationError("copied files failed verification")
             if not same_content(snapshot(source, hashes=True), expected):
@@ -289,6 +333,8 @@ def run_transfer(transfer_id: str) -> Path:
             portable_publish(temporary, destination, source, expected, transfer_id)
         if not owned_directory(destination, transfer_id) or not same_content(snapshot(destination, hashes=True), expected):
             raise FileOperationError("destination ownership or contents cannot be verified")
+
+        normalize_owned_copy(destination,transfer_id,expected,gid)
 
         # DB path changes and audit entry are committed together, before removing originals.
         with SessionLocal() as session:

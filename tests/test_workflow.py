@@ -149,7 +149,7 @@ def test_move_failure_rolls_back_manual_approval(setup, monkeypatch):
     release = importer.import_report(report(setup, "QUARANTINE"))
     def fail(*args, **kwargs):
         raise OSError("read only")
-    monkeypatch.setattr(file_workflow.shutil, "copytree", fail)
+    monkeypatch.setattr(file_workflow.shutil, "copyfile", fail)
     with pytest.raises(file_workflow.FileOperationError, match="could not move"):
         file_workflow.move_release(release.id, "STAGING", manual_pass=True)
     with setup.db() as session:

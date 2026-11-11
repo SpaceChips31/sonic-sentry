@@ -4,6 +4,8 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Shared destination permissions": "Permessi condivisi delle destinazioni",
+    "Transferred files use 0664 and directories use 2775. SONIC_MEDIA_GID selects the numeric host group; otherwise the destination group is used. Originals are retained if permissions cannot be applied.": "I file trasferiti usano 0664 e le directory 2775. SONIC_MEDIA_GID indica il GID numerico del gruppo sull’host; se assente si usa il gruppo della destinazione. Se non è possibile applicare i permessi, gli originali vengono conservati.",
     "Preview staging for approved albums": "Anteprima: sposta gli approvati",
     "Preview approval and staging": "Anteprima: approva e sposta",
     "Album evidence summary": "Riepilogo degli indicatori dell’album",
