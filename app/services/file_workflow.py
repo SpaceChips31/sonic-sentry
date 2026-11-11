@@ -252,6 +252,9 @@ def portable_publish(temporary: Path, destination: Path, source: Path, expected:
     actual = snapshot(destination, hashes=True)
     if any(name not in expected or value["sha256"] != expected[name]["sha256"] for name, value in actual.items()):
         raise FileOperationError("portable destination contains changed or added files; all copies were preserved")
+    for current,directories,_ in os.walk(temporary,followlinks=False):
+        for name in directories:
+            ensure_directory(destination/(Path(current)/name).relative_to(temporary),destination,gid)
     missing = [name for name in expected if name not in actual]
     if shutil.disk_usage(destination.parent).free < sum(expected[name]["size"] for name in missing):
         raise FileOperationError("not enough free space for portable publication; all copies were preserved")
