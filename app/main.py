@@ -1,4 +1,6 @@
 import json
+from collections import Counter
+from app.services.review_reasons import REASONS
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -20,7 +22,7 @@ from app.migrations import initialize_database
 from app.services.queue import enqueue_paths
 from app.services.files import contains_flac
 from app.services.file_workflow import check_pending_transfer, check_active_jobs, lock_file_operations, FileOperationError
-from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
+from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent, FileTask, ReconcileScan
 from app.services.verdicts import recalculate_release_status
 from app.services.settings import workflow_settings
 from app.services.batch import BatchDiscoveryError, discover_releases
@@ -205,19 +207,22 @@ def dashboard(request: Request):
             .limit(10)
         ).all()
 
+        background_count=session.scalar(select(func.count()).select_from(FileTask).where(FileTask.state.in_({"QUEUED","RUNNING"})))
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
             context={
                 "releases": releases,
                 "worker_health": __import__("app.health", fromlist=["worker_status"]).worker_status(),
+                "background_count":background_count,
                 "release_counters": release_counters,
                 "track_counters": track_counters,
                 "job_counters": job_counters,
                 "attention_releases": attention_releases,
                 "active_jobs": active_jobs,
                 "has_active_jobs": bool(
-                    job_counters.get("ANALYZING", 0)
+                    background_count
+                    or job_counters.get("ANALYZING", 0)
                     or job_counters.get("QUEUED", 0)
                     or job_counters.get("ROUTING", 0)
                 ),
@@ -280,7 +285,10 @@ def analyses(request: Request):
 
 
 @app.get("/releases", response_class=HTMLResponse)
-def releases_page(request: Request, q: str = "", status: str = "", page: int = 1):
+def releases_page(request: Request, q: str = "", status: str = "", page: int = 1, reason: str = ""):
+    from app.services.review_reasons import REASONS
+    if reason and reason not in REASONS:
+        raise HTTPException(status_code=400,detail="Invalid review reason")
     if status not in {"", "PASS", "QUARANTINE", "REJECTED"}:
         raise HTTPException(status_code=400, detail="Invalid release status")
     statement = select(Release)
@@ -288,13 +296,15 @@ def releases_page(request: Request, q: str = "", status: str = "", page: int = 1
         statement = statement.where(Release.title.icontains(q.strip(), autoescape=True))
     if status:
         statement = statement.where(Release.status == status)
+    if reason:
+        statement=statement.where(Release.tracks.any(Track.review_reason==reason))
     with SessionLocal() as session:
         total = session.scalar(select(func.count()).select_from(statement.subquery()))
         pages = max(1, (total + 49) // 50)
         page = min(max(1, page), pages)
         releases = session.scalars(statement.order_by(Release.id.desc()).offset((page - 1) * 50).limit(50)).all()
     return templates.TemplateResponse(request=request, name="releases.html", context={
-        "releases": releases, "query": q, "status": status, "page": page, "pages": pages, "total": total,
+        "reason":reason,"reasons":REASONS,"releases": releases, "query": q, "status": status, "page": page, "pages": pages, "total": total,
     })
 
 
@@ -464,7 +474,7 @@ def create_container_analysis(
             detail="The selected directory contains no FLAC files",
         )
 
-    if not enqueue_paths([source], configured_source.kind):
+    if not enqueue_paths([source], configured_source.kind, source_id=configured_source.id):
         raise HTTPException(status_code=409, detail="This album overlaps an active analysis or transfer")
 
     return RedirectResponse("/analyses", status_code=303)
@@ -487,7 +497,7 @@ def create_batch_analysis(
             detail="No FLAC releases were found below the selected directory",
         )
 
-    if not enqueue_paths(releases, f"{configured_source.kind}_BATCH"):
+    if not enqueue_paths(releases, f"{configured_source.kind}_BATCH", source_id=configured_source.id):
         raise HTTPException(status_code=409, detail="All discovered albums overlap active analyses or transfers")
 
     return RedirectResponse("/analyses", status_code=303)
@@ -616,10 +626,12 @@ def release_detail(request: Request, release_id: int):
         return templates.TemplateResponse(
             request=request,
             name="release.html",
-            context={"release": release, "file_operations_enabled": workflow_settings()["enabled"],
+            context={"reason_summary":Counter(track.review_reason or "uncertain" for track in release.tracks),
+                     "reason_labels":REASONS,
+                     "release": release, "file_operations_enabled": workflow_settings()["enabled"],
                      "reviews": list(session.scalars(select(ReviewEvent).where(ReviewEvent.release_id == release.id).order_by(ReviewEvent.id.desc()).limit(100))),
                      "trash_entry": session.scalar(select(TrashEntry).where(TrashEntry.release_id == release.id, TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"}))),
-                     "pending_transfer": session.scalar(select(FileTransfer.id).where(FileTransfer.release_id == release.id,
+                     "pending_transfer": session.scalar(select(FileTask.id).where(FileTask.release_id==release.id,FileTask.state.in_({"QUEUED","RUNNING"}))) or session.scalar(select(FileTransfer.id).where(FileTransfer.release_id == release.id,
                                                                                    FileTransfer.state.not_in({"COMPLETE", "ABANDONED"})))},
         )
 

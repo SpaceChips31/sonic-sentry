@@ -14,7 +14,7 @@ from app.config import PROJECT_ROOT, REPORT_ROOT
 from app.database import SessionLocal, engine
 from app.migrations import initialize_database
 from app.health import Heartbeat
-from app.models import AnalysisJob, AnalyzedContent, FileTransfer
+from app.models import AnalysisJob, AnalyzedContent, FileTransfer, ReconcileScan
 from app.services.importer import import_report
 from app.services.file_workflow import FileOperationError, auto_route_release, recover_transfers, utc_now, lock_file_operations
 from app.services.files import manifest_audio_hash, same_content, snapshot
@@ -60,7 +60,7 @@ def recover_interrupted_jobs() -> int:
             with SessionLocal() as session:
                 transfer = session.scalar(select(FileTransfer).where(FileTransfer.job_id == job.id).order_by(FileTransfer.created_at.desc()))
             if transfer is None:
-                auto_route_release(job.release_id, current_job_id=job.id)
+                auto_route_release(job.release_id, current_job_id=job.id, policy=job.routing_policy)
             elif transfer.state != "COMPLETE":
                 error = f"Analysis completed; file transfer needs attention: {transfer.error or transfer.state}"
         except (FileOperationError, OSError) as exc:
@@ -204,7 +204,7 @@ def process_job(job):
         phase("TRANSFERRING", job_id=job_id)
         routing_error = None
         try:
-            auto_route_release(release.id, current_job_id=job_id)
+            auto_route_release(release.id, current_job_id=job_id, policy=current.routing_policy)
         except (FileOperationError, OSError) as exc:
             routing_error = f"Analysis completed; automatic routing needs attention: {exc}"
         finish_job(job_id, "COMPLETED", routing_error)
@@ -229,14 +229,15 @@ def scan_loop():
     while not STOP.is_set():
         try:
             with process_lock("scanner"):
-                scan_sources()
+                scan_sources(respect_schedule=True)
             if HEARTBEAT:
                 HEARTBEAT.update(scanner_error=None, last_scan=time.time())
         except Exception as exc:
             print(f"Source scan failed: {exc}", flush=True)
             if HEARTBEAT:
                 HEARTBEAT.update(scanner_error=str(exc))
-        STOP.wait(workflow_settings()["scan_interval"])
+        from app.services.sources import next_scan_interval
+        STOP.wait(next_scan_interval())
 
 
 def main():
@@ -254,14 +255,27 @@ def main():
         from app.services.trash import recover_purges
         recover_purges()
         recover_interrupted_jobs()
+        from app.services.file_tasks import recover_tasks, process_next_task
+        from app.services.reconciliation import process_next_scan
+        recover_tasks()
+        with SessionLocal() as session:
+            for scan in session.scalars(select(ReconcileScan).where(ReconcileScan.state == "RUNNING")):
+                scan.state = "QUEUED"
+            session.commit()
         scanner = threading.Thread(target=scan_loop, daemon=True)
         scanner.start()
         try:
             while not STOP.is_set():
                 phase("IDLE", job_id=None)
+                phase("FILE_TASKS",job_id=None)
+                handled = process_next_task()
+                if not handled:
+                    phase("RECONCILING",job_id=None)
+                    handled = process_next_scan()
+                phase("IDLE",job_id=None)
                 job = claim_job()
                 if job is None:
-                    STOP.wait(2)
+                    STOP.wait(0.1 if handled else 2)
                 else:
                     process_job(job)
         except WorkerStopping:

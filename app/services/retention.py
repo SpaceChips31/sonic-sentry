@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.config import REPORT_ROOT, UPLOAD_ROOT
 from app.database import SessionLocal, DATA_DIR
-from app.models import AnalysisJob, Release, Track, FileTransfer, TrashEntry, AnalysisSource
+from app.models import AnalysisJob, Release, Track, FileTransfer, TrashEntry, AnalysisSource, FileTask
 from app.services.files import MARKER, snapshot, album_files
 from app.services.file_workflow import FileOperationError, lock_file_operations
 from app.services.settings import workflow_settings
@@ -27,6 +27,8 @@ def cleanup_preview(*, now: float | None = None) -> list[dict]:
         sources = [Path(p).resolve() for p in session.scalars(select(AnalysisSource.path))]
         protected = [Path(p).resolve() for p in session.scalars(select(Release.source_path))]
         protected += [Path(p).resolve() for p in session.scalars(select(Track.path))]
+        protected += [Path(p).resolve() for p in session.scalars(select(FileTask.source_path))]
+        protected += [Path(p).resolve() for p in session.scalars(select(FileTask.destination_path))]
         jobs = list(session.scalars(select(AnalysisJob)))
         protected += [Path(job.source_path).resolve() for job in jobs]
         for transfer in session.scalars(select(FileTransfer)):

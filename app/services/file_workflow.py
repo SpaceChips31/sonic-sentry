@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
-from app.models import AnalysisJob, Release, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent
-from app.services.files import MARKER, snapshot, same_content, file_digest, album_files, contains_flac
+from app.models import AnalysisJob, Release, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent, FileTask
+from app.services.files import MARKER, snapshot, same_content, file_digest, album_files, contains_flac, fingerprint
 from app.services.locks import process_lock
 from app.services.settings import workflow_settings
 from app.services.verdicts import recalculate_release_status
@@ -112,9 +112,14 @@ def check_active_jobs(session, source: Path, current_job_id: int | None = None) 
         raise FileOperationError("album has an active analysis; wait for it to finish")
 
 
-def check_pending_transfer(session, release_id: int) -> None:
+def check_pending_transfer(session, release_id: int, current_task_id: str | None = None) -> None:
     release = session.get(Release, release_id)
     path = Path(release.source_path) if release else None
+    for task in session.scalars(select(FileTask).where(FileTask.state.in_({"QUEUED", "RUNNING"}))):
+        if task.id != current_task_id and (task.release_id == release_id or path and any(
+            path.is_relative_to(other) or other.is_relative_to(path)
+            for other in (Path(task.source_path), Path(task.destination_path)))):
+            raise FileOperationError("album has a queued file operation; inspect Activity")
     for transfer in session.scalars(select(FileTransfer).where(FileTransfer.state.not_in({"COMPLETE", "ABANDONED"}))):
         if transfer.release_id == release_id or (path and any(
             path.is_relative_to(other) or other.is_relative_to(path)
@@ -148,6 +153,14 @@ def rename_exclusive(source: Path, destination: Path) -> None:
     if result:
         number = ctypes.get_errno()
         raise OSError(number, os.strerror(number), str(destination))
+
+
+def update_transfer_progress(transfer_id, done, total):
+    with SessionLocal() as session:
+        transfer = session.get(FileTransfer, transfer_id)
+        if transfer:
+            transfer.progress_bytes, transfer.total_bytes = done, total
+            session.commit()
 
 
 def transfer_state(transfer_id: str, state: str, error: str | None = None) -> None:
@@ -190,12 +203,17 @@ def portable_publish(temporary: Path, destination: Path, source: Path, expected:
     missing = [name for name in expected if name not in actual]
     if shutil.disk_usage(destination.parent).free < sum(expected[name]["size"] for name in missing):
         raise FileOperationError("not enough free space for portable publication; all copies were preserved")
+    done = sum(value["size"] for value in actual.values())
+    total = sum(value["size"] for value in expected.values())
+    update_transfer_progress(transfer_id, done, total)
     for name in missing:
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         with (temporary / name).open("rb") as input_file, target.open("xb") as output_file:
             shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
         shutil.copystat(temporary / name, target)
+        done += expected[name]["size"]
+        update_transfer_progress(transfer_id, done, total)
     if not same_content(snapshot(destination, hashes=True), expected):
         raise FileOperationError("portable destination failed verification; all copies were preserved")
 
@@ -246,7 +264,17 @@ def run_transfer(transfer_id: str) -> Path:
             if not owned_directory(temporary, transfer_id):
                 raise FileOperationError("temporary directory ownership cannot be verified")
             transfer_state(transfer_id, "COPYING")
-            shutil.copytree(source, temporary, dirs_exist_ok=True, symlinks=True)
+            total = sum(item["size"] for item in expected.values())
+            done = 0
+            update_transfer_progress(transfer_id, done, total)
+            def copy_progress(input_path, output_path):
+                nonlocal done
+                result = shutil.copy2(input_path, output_path)
+                if Path(input_path).name != MARKER:
+                    done += Path(input_path).stat().st_size
+                    update_transfer_progress(transfer_id, done, total)
+                return result
+            shutil.copytree(source, temporary, dirs_exist_ok=True, symlinks=True, copy_function=copy_progress)
             if not same_content(snapshot(temporary, hashes=True), expected):
                 raise FileOperationError("copied files failed verification")
             if not same_content(snapshot(source, hashes=True), expected):
@@ -301,6 +329,7 @@ def run_transfer(transfer_id: str) -> Path:
                 path.unlink()
             for directory, _, _ in os.walk(source, topdown=False):
                 Path(directory).rmdir()
+        update_transfer_progress(transfer_id, sum(item["size"] for item in expected.values()), sum(item["size"] for item in expected.values()))
         transfer_state(transfer_id, "COMPLETE")
         (destination / MARKER).unlink(missing_ok=True)
         return destination
@@ -313,7 +342,9 @@ def run_transfer(transfer_id: str) -> Path:
 
 def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False,
                  current_job_id: int | None = None, trash_entry_id: str | None = None, actor: str = "local",
-                 expected_source_root: Path | None = None) -> Path:
+                 expected_source_root: Path | None = None, current_task_id: str | None = None,
+                 expected_source_path: str | None = None, expected_destination: str | None = None,
+                 transfer_id: str | None = None, expected_signature: str | None = None) -> Path:
     normalized = target_kind.upper()
     settings = workflow_settings()
     try:
@@ -322,9 +353,11 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 release = session.get(Release, release_id)
                 if release is None:
                     raise FileOperationError("release not found")
-                check_pending_transfer(session, release_id)
+                check_pending_transfer(session, release_id, current_task_id)
                 source = validate_source(Path(release.source_path), settings, allow_managed=True)
                 check_active_jobs(session, source, current_job_id)
+                if expected_source_path is not None and str(source) != expected_source_path:
+                    raise FileOperationError("album path changed since the operation was queued")
                 if expected_source_root is not None and (not is_within(source, (expected_source_root,)) or not contains_flac(source)):
                     raise FileOperationError("album is no longer a FLAC folder in quarantine")
                 active_trash = session.scalar(select(TrashEntry).where(TrashEntry.release_id == release_id,
@@ -340,14 +373,18 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                     roots += tuple(Path(settings[k]).resolve() for k in ("staging", "quarantine", "rejected") if settings[k])
                     if not is_within(destination, roots) or not destination.parent.is_dir() or destination.exists():
                         raise FileOperationError("original destination is unavailable, unauthorized or already occupied")
-            transfer_id = uuid4().hex
+            transfer_id = transfer_id or uuid4().hex
             if normalized != "RESTORE":
                 destination = destination_for(source, normalized, settings,
                     basename=f"{source.name[:100]}--{transfer_id[:12]}" if normalized == "TRASH" else None)
                 if normalized == "TRASH":
                     trash_entry_id = transfer_id
+            if expected_destination is not None and str(destination) != expected_destination:
+                raise FileOperationError("destination settings changed; review the operation again")
             # Slow disk reads must not hold SQLite's writer lock.
             manifest = snapshot(source, hashes=True)
+            if expected_signature is not None and fingerprint({name:{"size":item["size"],"mtime":item["mtime"]} for name,item in manifest.items()}) != expected_signature:
+                raise FileOperationError("Album contents changed since preview; review and analyze again")
             if not manifest:
                 raise FileOperationError("album is empty")
             if shutil.disk_usage(destination.parent).free < sum(item["size"] for item in manifest.values()):
@@ -357,7 +394,7 @@ def move_release(release_id: int, target_kind: str, *, manual_pass: bool = False
                 release = session.scalar(select(Release).where(Release.id == release_id).options(selectinload(Release.tracks)))
                 if release is None or Path(release.source_path).resolve() != source:
                     raise FileOperationError("release changed while preparing its transfer")
-                check_pending_transfer(session, release_id)
+                check_pending_transfer(session, release_id, current_task_id)
                 validate_source(source, settings, allow_managed=True)
                 check_active_jobs(session, source, current_job_id)
                 previous_status = release.status
@@ -441,8 +478,12 @@ def delete_release_files(release_id: int, *, actor: str = "local") -> Path:
     return move_release(release_id, "TRASH", actor=actor)
 
 
-def auto_route_release(release_id: int, *, current_job_id: int | None = None) -> Path | None:
+def auto_route_release(release_id: int, *, current_job_id: int | None = None, policy: str = "inherit") -> Path | None:
     settings = workflow_settings()
+    if policy not in {"inherit","manual","pass","all"}:
+        raise FileOperationError("Invalid source routing policy")
+    if policy != "inherit":
+        settings["auto_route"],settings["route_nonpass"] = policy != "manual",policy == "all"
     if not settings["enabled"] or not settings["auto_route"]:
         return None
 

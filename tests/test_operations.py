@@ -217,7 +217,7 @@ def test_optional_auth_roles_are_enforced_on_server(setup, monkeypatch, role, qu
         assert client.post("/analyses/999/cancel").status_code == queue_status
         if role != "admin":
             assert client.post("/trash/unknown/purge", data={"confirmation":"ELIMINA"}).status_code == 403
-        assert client.post("/destinations/quarantine/staging", data={"release_ids":[999],"mode":"approved"}).status_code == (403 if role == "viewer" else 409)
+        assert client.post("/destinations/quarantine/staging", data={"release_ids":[999],"mode":"approved"}).status_code == (403 if role == "viewer" else 200)
         assert client.post("/logout", follow_redirects=False).status_code == 303
         assert client.get("/", follow_redirects=False).status_code == 303
 

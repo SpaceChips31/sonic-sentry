@@ -7,7 +7,7 @@ from sqlalchemy import select
 from client import TestClient
 from app import main
 from app.models import AnalysisSource, FileTransfer, Release, ReviewEvent
-from app.services import file_workflow, importer, inventory, queue
+from app.services import file_workflow, importer, inventory, queue, file_tasks
 from app.services.files import contains_flac
 from test_workflow import configure, report
 
@@ -64,14 +64,27 @@ def test_destination_filter_and_explicit_diagnostics(setup):
         assert "Empty" in client.get("/destinations/quarantine?show_all=true").text
 
 
+def submit_batch(client, ids, mode):
+    response=client.post("/destinations/quarantine/staging",data={"release_ids":ids,"mode":mode})
+    assert response.status_code==200
+    plan=file_tasks.preflight(ids,mode)
+    if not plan["ready"]:
+        return response
+    queued=client.post("/file-batches",data={"release_ids":ids,"mode":mode,"token":plan["token"]},follow_redirects=False)
+    assert queued.status_code==303
+    while file_tasks.process_next_task():
+        pass
+    return client.get(queued.headers["location"])
+
+
 def test_bulk_approval_moves_multiple_albums_and_audits_actor(setup):
     configure(setup)
     albums = [quarantine(setup, name) for name in ("One", "Two")]
     with TestClient(main.app) as client:
-        response = client.post("/destinations/quarantine/staging", data={"release_ids":[a.id for a in albums],"mode":"approve"})
+        response = submit_batch(client,[a.id for a in albums],"approve")
         assert response.status_code == 200
         assert "2 / 2" in response.text
-        assert ">One</a>" in response.text and ">Two</a>" in response.text
+        assert "One" in response.text and "Two" in response.text
     for album in albums:
         assert (setup.root / "staging" / album.title / "track.flac").is_file()
     with setup.db() as session:
@@ -85,8 +98,8 @@ def test_bulk_does_not_approve_without_explicit_mode_and_continues_safe_albums(s
     uncertain = quarantine(setup, "Uncertain")
     approved = quarantine(setup, "Approved", "PASS")
     with TestClient(main.app) as client:
-        response = client.post("/destinations/quarantine/staging", data={"release_ids":[uncertain.id,approved.id],"mode":"approved"})
-        assert response.status_code == 200 and "1 / 2" in response.text
+        response = submit_batch(client,[uncertain.id,approved.id],"approved")
+        assert response.status_code == 200 and "1 / 1" in response.text
     assert (setup.root / "quarantine" / "Uncertain" / "track.flac").exists()
     assert (setup.root / "staging" / "Approved" / "track.flac").exists()
     with setup.db() as session:
@@ -101,7 +114,7 @@ def test_bulk_integrity_failures_active_jobs_and_outside_paths_stay_put(setup):
     queue.enqueue_paths([setup.root / "quarantine" / "Busy"], "TEST")
     with TestClient(main.app) as client:
         response = client.post("/destinations/quarantine/staging", data={"release_ids":[broken.id,busy.id,outside.id],"mode":"approve"})
-        assert response.status_code == 200 and "0 / 3" in response.text
+        assert response.status_code == 200 and "Blocked" in response.text
     assert (setup.root / "quarantine" / "Broken" / "track.flac").exists()
     assert (setup.root / "quarantine" / "Busy" / "track.flac").exists()
     assert (setup.inbox / "Album" / "track.flac").exists()

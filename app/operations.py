@@ -10,7 +10,12 @@ from app.services.inventory import KINDS, destination_inventory
 from app.services.settings import workflow_settings, save_operational_settings, WorkflowConfigurationError
 from app.services.file_workflow import FileOperationError, is_within, move_release
 from app.database import SessionLocal
-from app.models import Release
+from app.models import Release, FileTask, FileBatch, FileTransfer, ReconcileScan, Track, AnalysisSource
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from app.services.file_tasks import preflight, enqueue_batch
+from app.services.reconciliation import allowed_roots, enqueue_scan, apply_proposal
+import json
 from app.services.batch import discover_releases, BatchDiscoveryError
 from app.services.queue import enqueue_paths
 from app.services.trash import restore_trash, purge_trash
@@ -58,26 +63,111 @@ def destinations(request: Request, kind: str, q: str = "", page: int = 1, show_a
 
 @router.post("/destinations/quarantine/staging", response_class=HTMLResponse)
 def bulk_staging(request: Request, release_ids: list[int] = Form(...), mode: str = Form(...)):
-    selected = list(dict.fromkeys(release_ids))
-    if mode not in {"approved", "approve"} or not 1 <= len(release_ids) <= 50:
-        raise HTTPException(status_code=400, detail="Select between 1 and 50 albums and a valid staging action")
-    settings = workflow_settings()
-    if not settings["enabled"] or settings["locked"] or not settings["quarantine"]:
-        raise HTTPException(status_code=409, detail="File operations are disabled or quarantine is not configured")
-    root = Path(settings["quarantine"]).resolve()
-    results = []
-    for release_id in selected:
-        with SessionLocal() as session:
-            release = session.get(Release, release_id)
-            title = release.title if release else str(release_id)
+    try:
+        plan=preflight(release_ids,mode)
+    except (OSError,RuntimeError,ValueError) as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return templates.TemplateResponse(request=request,name="file_preflight.html",context={"plan":plan,"ids":release_ids})
+
+
+@router.post("/file-batches")
+def create_file_batch(request: Request, release_ids: list[int] = Form(...), mode: str = Form(...), token: str = Form(...)):
+    try:
+        identifier=enqueue_batch(release_ids,mode,token,request.state.actor)
+    except (OSError,RuntimeError,ValueError) as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return RedirectResponse("/file-batches/"+identifier,status_code=303)
+
+
+@router.get("/file-batches/{batch_id}",response_class=HTMLResponse)
+def file_batch(request: Request,batch_id: str):
+    with SessionLocal() as session:
+        batch=session.get(FileBatch,batch_id)
+        if not batch:
+            raise HTTPException(status_code=404,detail="Batch not found")
+        tasks=list(session.scalars(select(FileTask).where(FileTask.batch_id==batch_id).order_by(FileTask.created_at,FileTask.id)))
+        transfers={t.id:t for t in session.scalars(select(FileTransfer).where(FileTransfer.id.in_([t.transfer_id for t in tasks if t.transfer_id])))}
+    return templates.TemplateResponse(request=request,name="file_batch.html",context={"batch":batch,"tasks":tasks,"transfers":transfers,
+        "active":any(t.state in {"QUEUED","RUNNING"} for t in tasks),"settings":workflow_settings()})
+
+
+@router.post("/file-tasks/{task_id}/cancel")
+def cancel_file_task(task_id: str):
+    from app.services.file_workflow import lock_file_operations
+    with SessionLocal() as session:
+        lock_file_operations(session)
+        task=session.get(FileTask,task_id)
+        if not task or task.state != "QUEUED":
+            raise HTTPException(status_code=409,detail="Only queued operations can be cancelled")
+        task.state="CANCELLED"
+        session.commit()
+    return RedirectResponse("/file-batches/"+task.batch_id if task.batch_id else "/activity",status_code=303)
+
+
+@router.get("/reconciliation",response_class=HTMLResponse)
+def reconciliation(request: Request):
+    with SessionLocal() as session:
+        scans=list(session.scalars(select(ReconcileScan).order_by(ReconcileScan.created_at.desc()).limit(50)))
+    return templates.TemplateResponse(request=request,name="reconciliation.html",context={"roots":allowed_roots(),"scans":scans})
+
+
+@router.post("/reconciliation")
+def start_reconciliation(request: Request,root: str=Form(...)):
+    try:
+        identifier=enqueue_scan(root,request.state.actor)
+    except (OSError,RuntimeError,ValueError) as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return RedirectResponse("/reconciliation/"+identifier,status_code=303)
+
+
+@router.get("/reconciliation/{scan_id}",response_class=HTMLResponse)
+def reconciliation_results(request: Request,scan_id: str):
+    with SessionLocal() as session:
+        scan=session.get(ReconcileScan,scan_id)
+    if not scan:
+        raise HTTPException(status_code=404,detail="Scan not found")
+    return templates.TemplateResponse(request=request,name="reconciliation_results.html",context={"scan":scan,"rows":json.loads(scan.results_json)})
+
+
+@router.post("/reconciliation/{scan_id}/apply")
+def reconcile_paths(request: Request,scan_id: str,release_id: int=Form(...)):
+    try:
+        apply_proposal(scan_id,release_id,request.state.actor)
+    except (OSError,RuntimeError,ValueError) as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return RedirectResponse(f"/releases/{release_id}",status_code=303)
+
+
+@router.post("/settings/sources/{source_id}/policy")
+def source_policy(source_id: int,scan_interval: str=Form(""),settle_seconds: str=Form(""),routing_policy: str=Form("inherit")):
+    from app.services.sources import save_source_policy
+    try:
+        save_source_policy(source_id,int(scan_interval) if scan_interval.strip() else None,int(settle_seconds) if settle_seconds.strip() else None,routing_policy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
+    return RedirectResponse("/settings#ingestion",status_code=303)
+
+
+@router.get("/releases/{release_id}/compare",response_class=HTMLResponse)
+def compare_tracks(request: Request,release_id: int,left: int|None=None,right: int|None=None):
+    from app.main import managed_spectrogram
+    with SessionLocal() as session:
+        release=session.scalar(select(Release).where(Release.id==release_id).options(selectinload(Release.tracks)))
+    if not release:
+        raise HTTPException(status_code=404,detail="Release not found")
+    chosen=[]
+    ids={track.id:track for track in release.tracks}
+    for identifier in (left if left is not None else next(iter(ids),None),right if right is not None else next(iter(list(ids)[1:]),next(iter(ids),None))):
+        if identifier not in ids:
+            raise HTTPException(status_code=400,detail="Select tracks from this release")
+        track=ids[identifier]
         try:
-            destination = move_release(release_id, "STAGING", manual_pass=mode == "approve",
-                actor=getattr(request.state, "actor", "local"), expected_source_root=root)
-            results.append({"id": release_id, "title": title, "ok": True, "detail": str(destination)})
-        except FileOperationError as exc:
-            results.append({"id": release_id, "title": title, "ok": False, "detail": str(exc)})
-    return templates.TemplateResponse(request=request, name="bulk_staging.html", context={
-        "results": results, "moved": sum(row["ok"] for row in results), "total": len(results)})
+            data=json.loads(track.forensic_json or "{}")
+            spectral=data.get("result",{}).get("authenticity",{}).get("spectral",{})
+        except (ValueError,AttributeError):
+            data,spectral={},{}
+        chosen.append({"track":track,"spectral":spectral,"graph":managed_spectrogram(data) is not None})
+    return templates.TemplateResponse(request=request,name="compare.html",context={"release":release,"chosen":chosen})
 
 
 @router.post("/destinations/{kind}/analyze")

@@ -3,6 +3,7 @@
 {% block content %}
 <section class="page-heading dashboard-heading"><div><p class="eyebrow">{{ _('Music pipeline') }}</p><h1>{{ _('Dashboard') }}</h1><p class="heading-copy">{{ _('Quality overview and analysis activity across the indexed library.') }}</p></div><div class="heading-actions">{% if has_active_jobs %}<a class="pipeline-state active" href="/analyses"><span class="live-dot"></span>{{ _('Pipeline active') }}</a>{% else %}<a class="pipeline-state" href="/analyses">{{ _('Pipeline idle') }}</a>{% endif %}<a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></div></section>
 <section class="worker-status" role="status"><span class="badge {{ 'pass' if worker_health.status == 'ok' else 'rejected' }}">{{ _('Worker available') if worker_health.status == 'ok' else _('Worker unavailable or blocked') }}</span><span>{{ _(worker_health.get('phase', 'UNKNOWN')) }}</span>{% if worker_health.get('scanner_error') %}<span>{{ worker_health.scanner_error }}</span>{% endif %}</section>
+{% if background_count %}<p class="notice"><a href="/activity">{{ background_count }} · {{ _('Background transfers') }}</a></p>{% endif %}
 <section class="stats dashboard-stats">
 <article class="stat"><span>{{ _('Analysed releases') }}</span><strong>{{ release_counters.total }}</strong><small>{{ track_counters.total }} {{ _('tracks indexed') }}</small></article>
 <article class="stat pass"><span>{{ _('Clean tracks') }}</span><strong>{{ track_counters.pass }}</strong><small>{{ track_counters.pass_pct }}% {{ _('automatic pass rate') }}</small></article>

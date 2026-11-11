@@ -9,6 +9,7 @@
 <article class="stat quarantine"><span>{{ _('Automatic review') }}</span><strong>{{ release.quarantine_tracks }}</strong></article>
 <article class="stat rejected"><span>{{ _('Automatic rejected') }}</span><strong>{{ release.rejected_tracks }}</strong></article>
 </section>
+<section class="panel settings-panel"><h2>{{ _('Album evidence summary') }}</h2><p>{% for code,count in reason_summary.items() %}<span class="badge">{{ _(reason_labels.get(code,code)) }}: {{ count }}</span> {% endfor %}</p><p>{{ _('These categories summarize analysis evidence; they do not establish the origin of the recording.') }}</p><a class="button secondary" href="/releases/{{ release.id }}/compare">{{ _('Compare tracks') }}</a></section>
 <section class="panel release-actions"><div><p class="eyebrow">{{ _('Album workflow') }}</p><h2>{{ _('File actions') }}</h2><p>{{ _('File actions help') }}</p></div>
 {% if release.operations and release.operations[0].action in ['DELETE','PURGE_TRASH'] %}<span class="badge rejected">{{ _('Files deleted') }}</span>
 {% elif pending_transfer %}<a class="button secondary" href="/activity">{{ _('View unfinished transfer') }}</a>
