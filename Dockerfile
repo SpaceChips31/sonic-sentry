@@ -14,7 +14,7 @@ RUN python -m pip wheel \
 
 FROM python:3.13-slim
 
-ARG VERSION=0.4.0
+ARG VERSION=0.4.1
 ARG VCS_REF=unknown
 ARG BUILD_DATE=unknown
 
@@ -28,6 +28,7 @@ LABEL org.opencontainers.image.title="SonicSentry" \
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
+      acl \
       ffmpeg \
       flac \
       mediainfo \

@@ -1,5 +1,11 @@
 # SonicSentry roadmap
 
+## Delivered in 0.4.1
+
+- Explicit destination media GID, 0664 files and setgid 2775 directories
+- Source modes/ACLs no longer cloned; destination ACL group access is verified
+- Linux regression with separate SonicSentry/Picard UIDs and restrictive sources
+
 ## Delivered in 0.4
 
 - Persistent background file batches and queued transfer recovery

@@ -34,7 +34,7 @@ jobs:
             version="${GITHUB_REF_NAME#v}"
             [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
           else
-            version="0.4.0-dev-${GITHUB_SHA:0:12}"
+            version="0.4.1-dev-${GITHUB_SHA:0:12}"
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
       - uses: docker/metadata-action@v5
@@ -69,6 +69,7 @@ jobs:
         run: |
           image="${IMAGE_TAGS%%$'\n'*}"
           docker run --rm -i "$image" python - < scripts/smoke-container.py
+          docker run --rm --user 0:0 -i "$image" python - < scripts/smoke-permissions.py
       - name: Publish verified image
         env:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
