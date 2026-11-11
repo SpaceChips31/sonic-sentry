@@ -24,7 +24,7 @@ with wave.open(str(source/'CD1'/'track.wav'),'wb') as audio:
     audio.setparams((1,2,44100,0,'NONE','not compressed'))
     audio.writeframes(b'\0\0'*4410)
 subprocess.run(['flac','--silent',str(source/'CD1'/'track.wav')],check=True)
-report=root/'report.json'
+report=root/'reports'/'report.json'
 report.write_text(json.dumps({'schema_version':1,'release':str(source),'files':[{'path':str(source/'CD1'/'track.flac'),'status':'PASS','integrity':{'ok':True}}]}))
 release=import_report(report)
 for directory in (source,source/'CD1',source/'CD1'/'Empty'):
@@ -32,7 +32,7 @@ for directory in (source,source/'CD1',source/'CD1'/'Empty'):
 for file in (source/'CD1').iterdir():
     if file.is_file():file.chmod(0o600)
 # Named source ACL must not be imported into the destination.
-subprocess.run(['setfacl','-m','u:30003:r--,g::---,m::r--',str(source/'CD1'/'track.flac')],check=True)
+subprocess.run(['setfacl','-m','u:30003:r--,g::---,m::---',str(source/'CD1'/'track.flac')],check=True)
 if os.environ['PUBLICATION']=='portable':
     import errno
     def unsupported(*args):raise OSError(errno.EINVAL,'simulated unsupported rename')
