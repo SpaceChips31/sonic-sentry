@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import SessionLocal
 from app.i18n import resolve_language
-from app.models import AnalysisJob, AnalysisSource, FileTransfer, SourceObservation, Release, AnalyzedContent
+from app.models import AnalysisJob, AnalysisSource, FileTransfer, SourceObservation, Release, AnalyzedContent, FileTask, FileBatch
 from app.presentation import configure_templates
 from app.services.file_workflow import (
     FileOperationError,
@@ -33,19 +33,22 @@ templates = configure_templates(Jinja2Templates(directory="app/templates"))
 def activity(request: Request):
     with SessionLocal() as session:
         transfers = list(session.scalars(select(FileTransfer).order_by(FileTransfer.created_at.desc()).limit(100)))
+        batches = list(session.scalars(select(FileBatch).order_by(FileBatch.created_at.desc()).limit(30)))
+        tasks = list(session.scalars(select(FileTask).order_by(FileTask.created_at.desc()).limit(100)))
         observations = list(session.scalars(select(SourceObservation).order_by(SourceObservation.id.desc()).limit(100)))
         sources = {source.id: source.name for source in session.scalars(select(AnalysisSource))}
         hashes = [item.content_hash for item in observations if item.content_hash]
         duplicates = dict(session.execute(select(AnalyzedContent.content_hash, AnalyzedContent.release_id).where(
             AnalyzedContent.content_hash.in_(hashes))).all())
     return templates.TemplateResponse(request=request, name="activity.html", context={
-        "transfers": transfers, "observations": observations, "source_names": sources, "duplicate_releases": duplicates})
+        "active_file_tasks":any(t.state in {"QUEUED","RUNNING"} for t in tasks),"batches":batches,"tasks":tasks,"transfers": transfers, "observations": observations, "source_names": sources, "duplicate_releases": duplicates})
 
 
 @router.post("/activity/transfers/{transfer_id}/resume")
-def resume_file_transfer(transfer_id: str):
+def resume_file_transfer(request: Request, transfer_id: str):
     try:
-        resume_transfer(transfer_id)
+        from app.services.file_tasks import enqueue_resume
+        enqueue_resume(transfer_id,request.state.actor)
     except FileOperationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse("/activity", status_code=303)

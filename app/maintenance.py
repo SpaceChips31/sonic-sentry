@@ -108,6 +108,8 @@ def restore_backup(archive_path: Path) -> Path:
             with database_connection(str(staged)) as connection:
                 connection.execute("UPDATE analysis_jobs SET status='CANCELLED',cancel_requested=1,error='Restored from backup; verify files before retrying' WHERE status IN ('QUEUED','ANALYZING','ROUTING')")
                 connection.execute("UPDATE analysis_sources SET watch_enabled=0")
+                connection.execute("UPDATE file_tasks SET state='CANCELLED',error='Restored metadata; preview again' WHERE state IN ('QUEUED','RUNNING')")
+                connection.execute("UPDATE reconcile_scans SET state='FAILED',error='Restored metadata; scan again' WHERE state IN ('QUEUED','RUNNING')")
                 connection.execute("UPDATE file_transfers SET state='NEEDS_ATTENTION',error='Restored metadata; reconcile physical files before resuming' WHERE state NOT IN ('COMPLETE','ABANDONED')")
                 connection.execute("UPDATE trash_entries SET state='PURGE_FAILED',error='Restored metadata; permanent deletion requires a new confirmation' WHERE state='PURGING'")
             retained = DATA_DIR / f"pre-restore-{secrets.token_hex(8)}.sqlite"

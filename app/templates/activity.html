@@ -2,10 +2,12 @@
 {% block title %}{{ _('Activity') }} · {{ app_name }}{% endblock %}
 {% block content %}
 <section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Activity') }}</h1><p>{{ _('Recent transfers and watched albums. Duplicates are reported without moving or deleting files.') }}</p></div><a class="button secondary" href="/activity">{{ _('Refresh') }}</a><a class="button secondary" href="/settings#ingestion">{{ _('Automatic ingestion') }}</a></section>
+<section class="panel activity-panel"><h2>{{ _('Background transfers') }}</h2>{% for batch in batches %}<article class="activity-row"><a href="/file-batches/{{ batch.id }}">{{ batch.created_at }} · {{ batch.actor }}</a></article>{% else %}<p>{{ _('No background batches yet') }}</p>{% endfor %}{% for task in tasks %}{% if not task.batch_id %}<article class="activity-row"><a href="/releases/{{ task.release_id }}">{{ task.source_path }}</a> · {{ _(task.state) }}{% if task.error %}<p>{{ task.error }}</p>{% endif %}</article>{% endif %}{% endfor %}</section>
 <section class="panel activity-panel"><h2>{{ _('File transfers') }}</h2>
 {% for transfer in transfers %}<article class="activity-row">
 <a href="/releases/{{ transfer.release_id }}">{{ _('Release') }} #{{ transfer.release_id }}</a> · <strong>{{ _(transfer.state) }}</strong>
 <code>{{ transfer.source_path }} → {{ transfer.destination_path }}</code>
+{% if transfer.total_bytes %}<progress value="{{ transfer.progress_bytes }}" max="{{ transfer.total_bytes }}"></progress><small>{{ '%.1f'|format(transfer.progress_bytes/1048576) }} / {{ '%.1f'|format(transfer.total_bytes/1048576) }} MiB</small>{% endif %}
 {% if transfer.error %}<p class="notice error">{{ transfer.error }}</p>{% endif %}
 {% if transfer.state not in ['COMPLETE','ABANDONED'] %}<form method="post" action="/activity/transfers/{{ transfer.id }}/resume">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Verify and resume') }}</button></fieldset></form>{% endif %}
 {% if transfer.state in ['NEEDS_ATTENTION','ABANDONED'] %}<code>{{ transfer.temporary_path }}</code>{% endif %}
@@ -15,4 +17,5 @@
 <section class="panel activity-panel"><h2>{{ _('Watched albums') }}</h2>
 {% for observation in observations %}<article class="activity-row"><strong>{{ source_names.get(observation.source_id, _('Removed source')) }}</strong> · {{ _(observation.state) }}<code>{{ observation.path }}</code>{% if observation.state == 'DUPLICATE' %}<p>{{ _('Identical FLAC files already analyzed. Files were left in place.') }}</p>{% if duplicate_releases.get(observation.content_hash) %}<a href="/releases/{{ duplicate_releases[observation.content_hash] }}">{{ _('Open result') }}</a>{% endif %}{% elif observation.message %}<p>{{ _(observation.message) }}</p>{% endif %}{% if observation.job_id %}<a href="/analyses">{{ _('Open queue') }} · #{{ observation.job_id }}</a>{% endif %}</article>{% else %}<p class="group-empty">{{ _('Enable folder watching in Settings to start automatic ingestion.') }}</p>{% endfor %}
 </section>
+{% if active_file_tasks %}<script>setTimeout(()=>location.reload(),3000)</script>{% endif %}
 {% endblock %}

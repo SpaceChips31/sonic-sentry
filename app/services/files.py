@@ -89,3 +89,49 @@ def contains_flac(root: Path) -> bool:
                and not (directory / name).is_symlink() for name in filenames):
             return True
     return False
+
+
+def flac_frame_hash(path: Path) -> str | None:
+    """Hash STREAMINFO audio properties and encoded frames, excluding mutable tag blocks.
+
+    Native FLAC structure: RFC 9639 section 6. Re-encoding is intentionally not equated.
+    """
+    try:
+        if path.is_symlink() or path.suffix.lower() != ".flac":
+            return None
+        before = path.stat()
+        with path.open("rb") as source:
+            if source.read(4) != b"fLaC":
+                return None
+            properties = None
+            for index in range(10000):
+                header = source.read(4)
+                if len(header) != 4:
+                    return None
+                kind, length = header[0] & 127, int.from_bytes(header[1:], "big")
+                if index == 0:
+                    if kind != 0 or length != 34:
+                        return None
+                    info = source.read(34)
+                    if len(info) != 34:
+                        return None
+                    properties = info[10:18]  # Sample rate/channels/bit depth/sample count.
+                else:
+                    if kind == 0 or kind == 127 or source.tell() + length > before.st_size:
+                        return None
+                    source.seek(length, 1)
+                if header[0] & 128:
+                    break
+            else:
+                return None
+            value = hashlib.sha256(properties)
+            count = 0
+            for part in iter(lambda: source.read(1024 * 1024), b""):
+                value.update(part)
+                count += len(part)
+        after = path.stat()
+        if count == 0 or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            return None
+        return "flac-frames-v1:" + value.hexdigest()
+    except OSError:
+        return None

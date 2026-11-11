@@ -75,21 +75,67 @@ with tempfile.TemporaryDirectory() as temporary:
     restore_trash(entry_id)
     file_workflow.rename_exclusive = native_rename
     assert (original / "track.flac").is_file()
-    export_backup(root / "metadata.zip")
+    from app.models import FileTask, AnalysisSource, ReconcileScan
+    from app.services.file_tasks import preflight, enqueue_batch
+    from app.services.reconciliation import enqueue_scan, apply_proposal
+    if original.parent != root / "quarantine":
+        file_workflow.move_release(release_id,"QUARANTINE")
+    plan = preflight([release_id],"approve")
+    assert plan["ready"], plan
+    batch_id=enqueue_batch([release_id],"approve",plan["token"],"smoke")
+    with SessionLocal() as session:
+        assert session.scalar(select(FileTask)).state=="QUEUED"
     import time
     worker = subprocess.Popen(["python", "-m", "app.worker"])
     try:
-        heartbeat = root / "data" / "worker-health.json"
-        for _ in range(100):
-            if heartbeat.exists() and json.loads(heartbeat.read_text()).get("phase") == "IDLE":
-                break
-            assert worker.poll() is None, "Worker exited during startup"
+        for _ in range(200):
+            with SessionLocal() as session:
+                task=session.scalar(select(FileTask).where(FileTask.batch_id==batch_id))
+                if task.state=="COMPLETE":
+                    break
+                assert task.state not in {"FAILED","NEEDS_ATTENTION"}, task.error
+            assert worker.poll() is None, "Worker exited during file task"
             time.sleep(0.1)
         else:
-            raise AssertionError("Worker heartbeat did not become ready")
+            raise AssertionError("Background task did not finish")
+        with SessionLocal() as session:
+            release=session.get(Release,release_id)
+            track=release.tracks[0]
+            identity,review=track.content_hash,track.human_review
+            assert identity
+            original=Path(release.source_path)
+            tagged=root/"tagged"
+            tagged.mkdir()
+            session.add(AnalysisSource(name="Tagged",path=str(tagged),kind="FILESYSTEM",enabled=True))
+            session.commit()
+        new_album=tagged/"Tagged album"
+        original.rename(new_album)
+        new_track=new_album/"01 renamed.FLAC"
+        (new_album/"track.flac").rename(new_track)
+        subprocess.run(["metaflac","--set-tag=TITLE=Updated",str(new_track)],check=True)
+        scan_id=enqueue_scan(str(tagged),"smoke")
+        for _ in range(200):
+            with SessionLocal() as session:
+                scan=session.get(ReconcileScan,scan_id)
+                if scan.state=="COMPLETE":
+                    assert json.loads(scan.results_json)[0]["state"]=="FOUND",scan.results_json
+                    break
+                assert scan.state!="FAILED",scan.error
+            assert worker.poll() is None
+            time.sleep(0.1)
+        else:
+            raise AssertionError("Background reconciliation did not finish")
+        apply_proposal(scan_id,release_id,"smoke")
+        with SessionLocal() as session:
+            release=session.get(Release,release_id)
+            assert release.source_path==str(new_album)
+            assert release.tracks[0].path==str(new_track)
+            assert release.tracks[0].human_review==review
+            assert release.tracks[0].content_hash==identity
+        export_backup(root / "metadata.zip")
         subprocess.run(["python", "-m", "app.health"], check=True)
     finally:
         worker.terminate()
         worker.wait(timeout=20)
-    print("Container trash, restore, backup and worker health checks passed")
+    print("Container real FLAC, fallback, background batch, tagged reconciliation, backup and health checks passed")
     engine.dispose()

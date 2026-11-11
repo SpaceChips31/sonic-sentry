@@ -696,3 +696,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bulk-staging-actions #staging-count { margin-right:8px; }
 .release-filter label.checkbox-label { display:flex; flex-direction:row; align-items:center; gap:8px; }
 .release-filter .checkbox-label input { width:auto; flex:none; }
+
+.comparison-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.comparison-selectors {display:flex;flex-wrap:wrap;gap:16px;}
+progress {display:block;width:100%;max-width:300px;height:16px;}
+@media(max-width:800px){.comparison-grid {grid-template-columns:1fr;}}
+
+.operation-table table {table-layout:fixed;width:100%;}
+.operation-table td {white-space:normal;overflow-wrap:anywhere;}
+.operation-table td a {overflow-wrap:anywhere;}
+.comparison-selectors label {display:grid;gap:6px;min-width:220px;margin-bottom:12px;}
+.comparison-selectors select {padding:8px;background:var(--bg,#22272b);color:var(--text,#e6e8ea);border:1px solid #555;}

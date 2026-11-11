@@ -6,7 +6,7 @@
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
     <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml">
     <link rel="stylesheet" href="/static/app.css?v=3">
-    <link rel="stylesheet" href="/static/desktop.css?v=14">
+    <link rel="stylesheet" href="/static/desktop.css?v=16">
 </head>
 <body>
 <header class="topbar">
@@ -17,6 +17,7 @@
         <a href="/releases">{{ _('Releases') }}</a>
         <a href="/analyses">{{ _('Queue') }}</a>
         <a href="/destinations/quarantine">{{ _('Destinations') }}</a>
+        <a href="/reconciliation">{{ _('Reconciliation') }}</a>
         <a href="/activity">{{ _('Activity') }}</a>
         {% if is_admin() %}<a href="/settings">{{ _('Settings') }}</a><a href="/maintenance">{{ _('Maintenance') }}</a>{% endif %}
         {% if can_operate() %}<a class="nav-primary" href="/analyses/new">{{ _('New analysis') }}</a>{% endif %}

@@ -34,6 +34,10 @@ def import_report(report_path: Path) -> Release:
             item["status"] = "REJECTED"
         paths.add(path)
 
+    from app.services.files import flac_frame_hash
+    from app.services.review_reasons import classify
+    identities = {str(path): flac_frame_hash(path) for path in paths}
+
     with SessionLocal() as session:
         lock_file_operations(session)
         existing = session.scalar(
@@ -85,6 +89,8 @@ def import_report(report_path: Path) -> Release:
                 integrity_ok=int(bool(item["integrity"]["ok"])),
                 forensic_verdict=spectral.get("verdict_label"),
                 human_review="NONE",
+                content_hash=identities.get(str(path)),
+                review_reason=classify(item["status"], item["integrity"]["ok"], spectral.get("verdict_label"), json.dumps(forensics)),
                 forensic_json=(
                     json.dumps(forensics, ensure_ascii=False)
                     if forensics is not None

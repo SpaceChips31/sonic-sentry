@@ -48,6 +48,8 @@ class Track(Base):
     forensic_verdict: Mapped[str | None] = mapped_column(String, nullable=True)
     human_review: Mapped[str] = mapped_column(String, default="NONE")
     forensic_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
     release: Mapped[Release] = relationship(back_populates="tracks")
 
@@ -72,6 +74,8 @@ class AnalysisJob(Base):
     finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_run_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    routing_policy: Mapped[str] = mapped_column(String, default="inherit")
 
 
 class ReleaseOperation(Base):
@@ -102,6 +106,10 @@ class AnalysisSource(Base):
     watch_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     last_scan_at: Mapped[str | None] = mapped_column(String, nullable=True)
     watch_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scan_interval: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    settle_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    routing_policy: Mapped[str] = mapped_column(String, default="inherit")
+    next_scan_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class WorkflowSettings(Base):
@@ -125,6 +133,8 @@ class FileTransfer(Base):
     manual_pass: Mapped[bool] = mapped_column(Boolean, default=False)
     target_kind: Mapped[str] = mapped_column(String)
     manifest_json: Mapped[str] = mapped_column(Text)
+    progress_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    total_bytes: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(String)
     actor: Mapped[str] = mapped_column(String, default="local")
@@ -187,3 +197,39 @@ class AuthUser(Base):
     username: Mapped[str] = mapped_column(String, primary_key=True)
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String)
+
+
+class FileBatch(Base):
+    __tablename__ = "file_batches"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    actor: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String)
+
+
+class FileTask(Base):
+    __tablename__ = "file_tasks"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    batch_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    release_id: Mapped[int] = mapped_column(Integer, index=True)
+    source_path: Mapped[str] = mapped_column(Text)
+    destination_path: Mapped[str] = mapped_column(Text)
+    source_signature: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_root: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manual_pass: Mapped[bool] = mapped_column(Boolean, default=False)
+    state: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
+    transfer_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String)
+
+
+class ReconcileScan(Base):
+    __tablename__ = "reconcile_scans"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    root: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String, default="QUEUED", index=True)
+    results_json: Mapped[str] = mapped_column(Text, default="[]")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed: Mapped[int] = mapped_column(Integer, default=0)
+    actor: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String)

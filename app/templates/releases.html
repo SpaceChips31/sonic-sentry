@@ -5,6 +5,7 @@
 <form class="release-filter panel" method="get">
   <label>{{ _('Search releases') }}<input type="search" name="q" value="{{ query }}"></label>
   <label>{{ _('Final status') }}<select name="status"><option value="">{{ _('All releases') }}</option>{% for value in ['PASS', 'QUARANTINE', 'REJECTED'] %}<option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|human_status }}</option>{% endfor %}</select></label>
+  <label>{{ _('Review reason') }}<select name="reason"><option value="">{{ _('All reasons') }}</option>{% for code,label in reasons.items() %}<option value="{{ code }}" {% if reason == code %}selected{% endif %}>{{ _(label) }}</option>{% endfor %}</select></label>
   <button class="button secondary" type="submit">{{ _('Filter') }}</button>
 </form>
 <form method="post" action="/releases/review">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}>
@@ -26,8 +27,8 @@ all?.addEventListener('change', event => { boxes.forEach(input => {input.checked
 boxes.forEach(input => input.addEventListener('change', updateSelection));
 </script>
 <nav class="pagination" aria-label="{{ _('Pages') }}">
-{% if page > 1 %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&page={{ page-1 }}">← {{ _('Previous') }}</a>{% endif %}
+{% if page > 1 %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&reason={{ reason|urlencode }}&page={{ page-1 }}">← {{ _('Previous') }}</a>{% endif %}
 <span>{{ page }} / {{ pages }}</span>
-{% if page < pages %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&page={{ page+1 }}">{{ _('Next') }} →</a>{% endif %}
+{% if page < pages %}<a class="button secondary" href="?q={{ query|urlencode }}&status={{ status }}&reason={{ reason|urlencode }}&page={{ page+1 }}">{{ _('Next') }} →</a>{% endif %}
 </nav>
 {% endblock %}

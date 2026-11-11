@@ -15,7 +15,7 @@ from app.services.settings import workflow_settings
 MAX_ENQUEUE_PER_SCAN = 25
 
 
-def scan_sources(*, now: float | None = None) -> int:
+def scan_sources(*, now: float | None = None, respect_schedule: bool = False) -> int:
     now = time.time() if now is None else now
     settings = workflow_settings()
     excluded = tuple(Path(settings[key]).resolve() for key in ("staging", "quarantine", "rejected", "trash") if settings[key])
@@ -24,6 +24,8 @@ def scan_sources(*, now: float | None = None) -> int:
             AnalysisSource.enabled.is_(True), AnalysisSource.watch_enabled.is_(True))))
     queued = 0
     for source in sources:
+        if respect_schedule and source.next_scan_at and now < source.next_scan_at:
+            continue
         try:
             root = Path(source.path).resolve()
             if not root.is_dir():
@@ -34,7 +36,7 @@ def scan_sources(*, now: float | None = None) -> int:
                 if album == root:
                     continue  # Never automatically handle a source root as an album.
                 seen.add(str(album))
-                queued += observe_album(source, album, now, settings["settle_seconds"], allow_queue=queued < MAX_ENQUEUE_PER_SCAN)
+                queued += observe_album(source, album, now, (source.settle_seconds if source.settle_seconds is not None else settings["settle_seconds"]), allow_queue=queued < MAX_ENQUEUE_PER_SCAN)
             with SessionLocal() as session:
                 for observation in session.scalars(select(SourceObservation).where(SourceObservation.source_id == source.id)):
                     if observation.path not in seen:
@@ -42,12 +44,14 @@ def scan_sources(*, now: float | None = None) -> int:
                 saved = session.get(AnalysisSource, source.id)
                 if saved:
                     saved.last_scan_at, saved.watch_error = utc_now(), None
+                    saved.next_scan_at = now + (source.scan_interval if source.scan_interval is not None else settings["scan_interval"])
                 session.commit()
         except (OSError, ValueError) as exc:
             with SessionLocal() as session:
                 saved = session.get(AnalysisSource, source.id)
                 if saved:
                     saved.last_scan_at, saved.watch_error = utc_now(), str(exc)
+                    saved.next_scan_at = now + (source.scan_interval if source.scan_interval is not None else settings["scan_interval"])
                     session.commit()
     return queued
 
@@ -107,7 +111,7 @@ def observe_album(source: AnalysisSource, album: Path, now: float, settle_second
         observation_id = observation.id
         session.commit()
     # Do not keep a read transaction open while the queue acquires its writer lock.
-    ids = enqueue_paths([album], f"{source.kind}_WATCH")
+    ids = enqueue_paths([album], f"{source.kind}_WATCH", source_id=source.id)
     with SessionLocal() as session:
         observation = session.get(SourceObservation, observation_id)
         if ids:

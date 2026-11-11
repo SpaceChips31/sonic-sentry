@@ -3,11 +3,11 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import AnalysisJob, FileTransfer, TrashEntry
+from app.models import AnalysisJob, FileTransfer, TrashEntry, FileTask, AnalysisSource
 from app.services.file_workflow import lock_file_operations, utc_now
 
 
-def enqueue_paths(paths: list[Path], source_type: str) -> list[int]:
+def enqueue_paths(paths: list[Path], source_type: str, *, source_id: int | None = None) -> list[int]:
     """One transaction for every producer, including overlapping parent/child jobs."""
     created = []
     with SessionLocal() as session:
@@ -18,12 +18,15 @@ def enqueue_paths(paths: list[Path], source_type: str) -> list[int]:
             busy.extend((Path(transfer.source_path), Path(transfer.destination_path)))
         busy.extend(Path(path) for path in session.scalars(select(TrashEntry.trash_path).where(
             TrashEntry.state.in_({"PENDING", "TRASHED", "PURGING", "PURGE_FAILED"}))))
+        for task in session.scalars(select(FileTask).where(FileTask.state.in_({"QUEUED", "RUNNING"}))):
+            busy.extend((Path(task.source_path), Path(task.destination_path)))
+        source = session.get(AnalysisSource, source_id) if source_id else None
         for path in paths:
             path = path.resolve()
             if not path.is_dir() or any(path.is_relative_to(other) or other.is_relative_to(path) for other in busy):
                 continue
             job = AnalysisJob(source_type=source_type, source_path=str(path), display_name=path.name,
-                              status="QUEUED", created_at=utc_now())
+                              status="QUEUED", created_at=utc_now(), source_id=source_id, routing_policy=source.routing_policy if source else "inherit")
             session.add(job)
             session.flush()
             created.append(job.id)

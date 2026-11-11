@@ -54,8 +54,8 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.3.1`), the minor release
-(`0.3`), and `latest`. Production deployments should prefer the exact
+Available release tags include the exact version (`0.4.0`), the minor release
+(`0.4`), and `latest`. Production deployments should prefer the exact
 version.
 
 For a private fork or private package, authenticate before pulling:
@@ -173,10 +173,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.3.1:
+For SonicSentry 0.4.0:
 
 ```env
-SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.3.1
+SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.0
 ```
 
 ## Local development
@@ -189,9 +189,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.3.1` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.4.0` runs the GitHub Actions
 publication workflow. It tests, builds and smoke-tests the image before publishing the corresponding
-`0.3.1`, `0.3`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
+`0.4.0`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -260,7 +260,7 @@ are consumed by Compose. Web and Worker must share identical settings and mounts
 
 | Variable | Default / purpose |
 | --- | --- |
-| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.3.1` |
+| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.0` |
 | `PUID`, `PGID` | `1000`, `1000`; UID/GID for writable mounts |
 | `LOSSLESS_VALIDATOR_PORT` | `8090`; host Web port |
 | `MEDIA_ROOT` | `/mnt/media`; host folder mounted at `/data` |
@@ -359,3 +359,51 @@ and the hidden temporary copy remain until destination verification succeeds. Un
 changed or partially written destination files stop recovery for inspection. Existing
 failed journals can use **Activity > Verify and resume** after upgrading. The application
 does not automatically resume transfers marked NEEDS_ATTENTION.
+
+## Persistent operations and review (0.4)
+
+Quarantine bulk staging now opens a **Transfer preview**, without moving or approving
+anything. It checks source readability/writability, staging writability, root boundaries,
+active jobs, pending operations, integrity verdicts, destination collisions and a
+conservative disk budget of two extra album copies. Only eligible albums are queued
+when you confirm. Space, source fingerprints, settings and permissions are checked again
+at execution; an album changed since preview requires a new preview/analysis.
+
+The queue is persisted in SQLite. **Activity** links to each batch with per-album states,
+file-byte progress, cancellation of operations not yet started and links to recovery.
+You can close the browser. The single worker handles one file operation between analysis
+jobs; a running long analysis can delay queued file operations. Transfers already started
+finish safely. Restart recovery reuses the same journal instead of creating another move
+or audit entry. **Verify and resume** also queues recovery instead of holding an HTTP
+request open. Failed operations without a journal require a new preview. Keep one worker
+per database. Existing single-album file actions retain their synchronous behavior.
+
+**Settings > Source rules** allows independent scan intervals, stability waits and
+manual / approved-only / all-verdict routing for each source. Blank numbers and the
+inherit option use global settings. Routing policy is captured for newly queued source
+jobs, including manual source batches; already queued jobs keep their policy. Source
+policies cannot override disabled file operations or the deployment hard lock.
+
+**Reconciliation** queues a scan of a configured source/destination. New analyses record
+an identity of STREAMINFO audio properties plus encoded FLAC frames, excluding mutable
+metadata blocks ([FLAC format, RFC 9639](https://www.rfc-editor.org/rfc/rfc9639.html)).
+Scans also register references for older records whose original files still exist.
+Moving/renaming files and editing metadata can then be recognized when encoded audio is
+unchanged. Re-encoding is deliberately not treated as identical. Scans never move/delete
+audio; they propose a database-only path update, confirmed per album. All track identities,
+original paths, active jobs, destination ownership and current files are rechecked before
+updating paths. Reviews, analysis results, report graphs and audit history are preserved.
+Ambiguous copies, missing references, additional/missing FLAC tracks and changed audio
+are never guessed. If files had already disappeared before a reference was registered,
+restore originals or analyze the new location. Scan the tagged library by adding it as
+a source first; scans are limited to 100000 FLAC candidates per run.
+
+The release library filters by primary review reason. Each album summarizes integrity,
+codec, transcode, cutoff and uncertain results. These categories summarize the report;
+they are not proof of recording provenance. **Compare tracks** displays two tracks from
+the same album with forensic evidence and original managed spectrograms. Axes/colour
+scales remain those generated by the engine and should be read before visual comparison.
+
+0.4 upgrades are additive. Back up the persistent data before upgrading and keep both
+containers on the same image. Metadata restore cancels queued file tasks and pauses
+reconciliation scans so that restored jobs cannot move files without a fresh decision.

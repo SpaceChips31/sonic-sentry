@@ -1,5 +1,13 @@
 # SonicSentry roadmap
 
+## Delivered in 0.4
+
+- Persistent background file batches and queued transfer recovery
+- Signed preflight preview with space, permissions, collision and source-change checks
+- Confirmed database-only reconciliation of moved/tagged FLAC albums
+- Independent scan/stability/routing policies per source
+- Review-reason filters, album evidence summaries and side-by-side track comparison
+
 ## Delivered in 0.3.1
 
 - Recursive FLAC-only folder lists with destination diagnostics toggle

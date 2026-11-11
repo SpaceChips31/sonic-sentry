@@ -92,3 +92,28 @@ def add_source(name: str, path: str, kind: str) -> None:
             raise SourceConfigurationError("Questo percorso è già configurato")
         session.add(AnalysisSource(name=clean_name, path=str(resolved), kind=clean_kind, enabled=True))
         session.commit()
+
+
+def save_source_policy(source_id, scan_interval, settle_seconds, routing_policy):
+    if routing_policy not in {"inherit","manual","pass","all"}:
+        raise SourceConfigurationError("Invalid routing policy")
+    if scan_interval is not None and not 10 <= scan_interval <= 86400:
+        raise SourceConfigurationError("Scan interval must be 10–86400 seconds")
+    if settle_seconds is not None and not 30 <= settle_seconds <= 86400:
+        raise SourceConfigurationError("Stability wait must be 30–86400 seconds")
+    with SessionLocal() as session:
+        from app.services.file_workflow import lock_file_operations
+        lock_file_operations(session)
+        source = session.get(AnalysisSource,source_id)
+        if not source:
+            raise SourceConfigurationError("Source not found")
+        source.scan_interval,source.settle_seconds,source.routing_policy=scan_interval,settle_seconds,routing_policy
+        source.next_scan_at=None
+        session.commit()
+
+
+def next_scan_interval():
+    from app.services.settings import workflow_settings
+    with SessionLocal() as session:
+        intervals = list(session.scalars(select(AnalysisSource.scan_interval).where(AnalysisSource.enabled.is_(True),AnalysisSource.watch_enabled.is_(True),AnalysisSource.scan_interval.is_not(None))))
+    return min([workflow_settings()["scan_interval"]]+intervals)
