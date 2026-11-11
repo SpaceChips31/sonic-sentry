@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app import config, main, worker, workflow, security, health, maintenance, operations
 from app.database import Base
-from app.services import file_workflow, importer, settings, sources, ingestion, queue, locks, retention, inventory, trash, file_tasks, reconciliation
+from app.services import file_workflow, importer, settings, sources, ingestion, queue, locks, retention, inventory, trash, file_tasks, reconciliation, history_reset
 
 
 @pytest.fixture
@@ -12,7 +12,7 @@ def setup(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
     factory = sessionmaker(engine, expire_on_commit=False)
     Base.metadata.create_all(engine)
-    for module in (main, worker, workflow, file_workflow, importer, settings, sources, ingestion, queue, security, retention, inventory, trash, operations, file_tasks, reconciliation):
+    for module in (main, worker, workflow, file_workflow, importer, settings, sources, ingestion, queue, security, retention, inventory, trash, operations, file_tasks, reconciliation, history_reset):
         monkeypatch.setattr(module, "SessionLocal", factory)
     monkeypatch.setattr(main, "engine", engine)
     monkeypatch.setattr(locks, "DATA_DIR", tmp_path)

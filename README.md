@@ -459,3 +459,18 @@ sources, umask 0077, inherited/source ACLs, native and portable publication, act
 FLAC tag editing and rename by the separate Picard-like UID, plus denied-group recovery.
 The outer test container alone starts as root to create and drop to those test identities;
 the production image and application continue to run without root privileges.
+
+## Reset test history before production
+
+**Maintenance > Reset analysis history** previews the records removed by an admin-only,
+CSRF-protected confirmation requiring `AZZERA`. It clears indexed albums/tracks, reviews,
+terminal transfer history, queued analyses/file tasks, observations, duplicate references
+and reconciliation history. Configuration, source definitions and user accounts remain;
+watching is disabled until you explicitly re-enable it. Audio, reports and uploads on disk
+are untouched. This is a metadata reset, not deletion of the SQLite file or media volumes.
+
+The reset acquires scanner/file-workflow and database locks and refuses running analyses,
+running file tasks/scans, unfinished transfer journals and recoverable trash entries.
+Resolve those first rather than losing their manifests or original-path references.
+You may download a metadata backup before confirming. Existing on-disk albums remain
+visible in Destinations as unregistered folders and can be analyzed again when desired.

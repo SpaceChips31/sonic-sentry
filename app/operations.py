@@ -237,3 +237,21 @@ def clean_artifacts(tokens: list[str] = Form(...), confirmation: str = Form(...)
     except (RuntimeError, OSError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse(f"/maintenance?removed={count}&bytes={size}", status_code=303)
+
+
+@router.get("/maintenance/reset",response_class=HTMLResponse)
+def history_reset_preview(request: Request):
+    from app.services.history_reset import reset_preview
+    return templates.TemplateResponse(request=request,name="history_reset.html",context={"preview":reset_preview()})
+
+
+@router.post("/maintenance/reset")
+def history_reset_confirm(request: Request,confirmation: str=Form(...)):
+    from app.services.history_reset import reset_history
+    if confirmation!="AZZERA":
+        raise HTTPException(status_code=400,detail="Type AZZERA to remove analysis records and history")
+    try:
+        count=reset_history()
+    except (OSError,RuntimeError,ValueError) as exc:
+        raise HTTPException(status_code=409,detail=str(exc)) from exc
+    return RedirectResponse(f"/maintenance/reset?cleared={count}",status_code=303)
