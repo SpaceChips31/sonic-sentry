@@ -136,7 +136,7 @@ def process_next_task():
                 expected_source_path=task.source_path, expected_destination=task.destination_path, expected_signature=task.source_signature,
                 current_task_id=task.id,transfer_id=task.transfer_id)
         state, error = "COMPLETE", None
-    except (OSError, RuntimeError, ValueError) as exc:
+    except Exception as exc:
         with SessionLocal() as session:
             transfer = session.get(FileTransfer, task.transfer_id)
         state, error = ("NEEDS_ATTENTION" if transfer else "FAILED"), str(exc)

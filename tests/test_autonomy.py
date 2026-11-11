@@ -201,3 +201,59 @@ def test_review_reason_filter_summary_and_compare_are_scoped(setup):
         assert client.get(f"/releases/{album.id}/compare?left=99999").status_code==400
         assert client.get("/releases?reason=invalid").status_code==400
         assert client.get("/reconciliation").status_code==200
+
+
+def test_background_errors_are_recorded_without_stopping_worker(setup,monkeypatch):
+    configure(setup)
+    album=quarantine(setup,"One")
+    plan=file_tasks.preflight([album.id],"approve")
+    file_tasks.enqueue_batch([album.id],"approve",plan["token"],"tester")
+    def unexpected(*args,**kwargs):
+        raise LookupError("unexpected failure")
+    monkeypatch.setattr(file_tasks,"move_release",unexpected)
+    assert file_tasks.process_next_task()
+    with setup.db() as session:
+        assert session.scalar(select(FileTask)).state=="FAILED"
+    assert (setup.root/"quarantine"/"One"/"track.flac").exists()
+
+
+def test_deployment_lock_pauses_background_tasks_and_source_overrides(setup,monkeypatch):
+    configure(setup)
+    album=quarantine(setup,"One")
+    plan=file_tasks.preflight([album.id],"approve")
+    file_tasks.enqueue_batch([album.id],"approve",plan["token"],"tester")
+    monkeypatch.setattr(config,"FILE_OPERATIONS_LOCKED",True)
+    assert not file_tasks.process_next_task()
+    assert file_workflow.auto_route_release(album.id,policy="all") is None
+    assert (setup.root/"quarantine"/"One"/"track.flac").exists()
+
+
+def test_metadata_restore_cancels_queued_operations_and_scans(setup):
+    from app import maintenance
+    configure(setup)
+    album=quarantine(setup,"One")
+    plan=file_tasks.preflight([album.id],"approve")
+    file_tasks.enqueue_batch([album.id],"approve",plan["token"],"tester")
+    reconciliation.enqueue_scan(str(setup.root/"staging"),"tester")
+    archive=setup.root/"backup.zip"
+    maintenance.export_backup(archive)
+    maintenance.restore_backup(archive)
+    with setup.db() as session:
+        assert session.scalar(select(FileTask)).state=="CANCELLED"
+        assert session.scalar(select(ReconcileScan)).state=="FAILED"
+    assert (setup.root/"quarantine"/"One"/"track.flac").exists()
+
+
+def test_reconciliation_does_not_adopt_destination_reserved_by_another_task(setup):
+    configure(setup)
+    album=referenced_release(setup)
+    destination=setup.root/"staging"/"Tagged"
+    (setup.inbox/"Album").rename(destination)
+    identifier=reconciliation.enqueue_scan(str(setup.root/"staging"),"tester")
+    reconciliation.process_next_scan()
+    with setup.db() as session:
+        session.add(FileTask(id="reserved",release_id=999,source_path=str(setup.inbox/"Other"),destination_path=str(destination),state="QUEUED",actor="tester",created_at="now"))
+        session.commit()
+    with pytest.raises(file_workflow.FileOperationError,match="active file operation"):
+        reconciliation.apply_proposal(identifier,album.id,"tester")
+    assert (destination/"track.flac").exists()

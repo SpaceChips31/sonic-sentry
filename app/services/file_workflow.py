@@ -448,6 +448,8 @@ def close_transfer(transfer_id: str) -> None:
             if release is None or not Path(release.source_path).is_dir() or any(not Path(t.path).is_file() for t in release.tracks):
                 raise FileOperationError("restore the files referenced by this release before closing its transfer")
             transfer.state = "ABANDONED"
+            for task in session.scalars(select(FileTask).where(FileTask.transfer_id==transfer.id,FileTask.state.in_({"QUEUED","NEEDS_ATTENTION","FAILED"}))):
+                task.state,task.error="CANCELLED","Transfer closed by operator; files preserved"
             if transfer.trash_entry_id:
                 entry = session.get(TrashEntry, transfer.trash_entry_id)
                 if transfer.target_kind == "TRASH":

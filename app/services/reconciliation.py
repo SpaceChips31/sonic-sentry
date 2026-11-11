@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.database import SessionLocal
-from app.models import Release, Track, ReconcileScan, AnalysisSource, ReleaseOperation, TrashEntry
+from app.models import Release, Track, ReconcileScan, AnalysisSource, ReleaseOperation, TrashEntry, FileTask, FileTransfer
 from app.services.files import flac_frame_hash, album_files
 from app.services.batch import discover_releases
 from app.services.settings import workflow_settings
@@ -52,7 +52,7 @@ def process_next_scan():
         with process_lock("file-workflow"):
             results = scan_paths(scan.id, Path(scan.root))
         state, error = "COMPLETE", None
-    except (OSError, RuntimeError, ValueError) as exc:
+    except Exception as exc:
         state, error, results = "FAILED", str(exc), []
     with SessionLocal() as session:
         saved = session.get(ReconcileScan, scan.id)
@@ -159,6 +159,11 @@ def apply_proposal(scan_id, release_id, actor):
             check_pending_transfer(session,release_id)
             check_active_jobs(session,Path(release.source_path))
             check_active_jobs(session,destination)
+            for model, field in ((FileTransfer,FileTransfer.state),(FileTask,FileTask.state)):
+                statement=select(model).where(field.not_in({"COMPLETE","ABANDONED"})) if model is FileTransfer else select(model).where(field.in_({"QUEUED","RUNNING"}))
+                for operation in session.scalars(statement):
+                    if any(destination.is_relative_to(Path(value)) or Path(value).is_relative_to(destination) for value in (operation.source_path,operation.destination_path)):
+                        raise FileOperationError("Proposed path has an active file operation")
             if session.scalar(select(Release.id).where(Release.source_path==str(destination),Release.id!=release_id)):
                 raise FileOperationError("Destination is already registered")
             tracks = {track.id:track for track in release.tracks}
