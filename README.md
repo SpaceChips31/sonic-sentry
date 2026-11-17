@@ -54,7 +54,7 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.4.3`), the minor release
+Available release tags include the exact version (`0.4.4`), the minor release
 (`0.4`), and `latest`. Production deployments should prefer the exact
 version.
 
@@ -173,10 +173,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.4.3:
+For SonicSentry 0.4.4:
 
 ```env
-SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.3
+SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.4
 ```
 
 ## Local development
@@ -189,9 +189,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.4.3` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.4.4` runs the GitHub Actions
 publication workflow. It tests, builds and smoke-tests the image before publishing the corresponding
-`0.4.3`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
+`0.4.4`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -260,7 +260,7 @@ are consumed by Compose. Web and Worker must share identical settings and mounts
 
 | Variable | Default / purpose |
 | --- | --- |
-| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.3` |
+| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.4` |
 | `SONIC_MEDIA_GID` | Optional numeric host media group; otherwise destination-parent GID |
 | `PUID`, `PGID` | `1000`, `1000`; UID/GID for writable mounts |
 | `LOSSLESS_VALIDATOR_PORT` | `8090`; host Web port |
@@ -519,3 +519,19 @@ and the existing side-by-side comparison remains available on the album.
 Scores are indicators, not a probability of lossy origin; a frequency cutoff
 alone does not establish lossy provenance. Analysis thresholds and routing
 policies are unchanged.
+
+
+## Dashboard decisions (0.4.4)
+
+The main track count and bar show current decisions after manual review:
+accepted, awaiting review and rejected. Accepted tracks include both automatic
+passes and approved review tracks; integrity failures and automatic/human
+rejections remain rejected. The accepted total is split by automatic acceptance
+and manual approval. These counts describe decisions, not physical destination
+folders. The integrity-failure count specifically counts failed integrity checks.
+
+Original automatic results remain available in an expandable section and are
+never rewritten by a review. For example, 1,787 automatic passes plus 281 manually
+approved review tracks produce 2,068 accepted tracks (100%), while the original
+automatic pass rate remains 86.4%. The review-history link opens all albums,
+including approved ones. No database migration or reanalysis is needed.
