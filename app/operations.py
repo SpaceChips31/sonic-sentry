@@ -255,3 +255,32 @@ def history_reset_confirm(request: Request,confirmation: str=Form(...)):
     except (OSError,RuntimeError,ValueError) as exc:
         raise HTTPException(status_code=409,detail=str(exc)) from exc
     return RedirectResponse(f"/maintenance/reset?cleared={count}",status_code=303)
+
+
+@router.get("/releases/{release_id}/forget", response_class=HTMLResponse)
+def preview_forget_one(request: Request, release_id: int):
+    return preview_forget(request, [release_id])
+
+
+@router.post("/releases/forget/preview", response_class=HTMLResponse)
+def preview_forget(request: Request, release_ids: list[int] = Form(...)):
+    from app.services.forget import forget_preview
+    try:
+        plan = forget_preview(release_ids)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return templates.TemplateResponse(request=request, name="forget.html", context={"plan": plan, "ids": release_ids})
+
+
+@router.post("/releases/forget")
+def confirm_forget(request: Request, release_ids: list[int] = Form(...), token: str = Form(...),
+                   mode: str = Form(...), confirmation: str = Form(...)):
+    from app.services.forget import forget_albums
+    if confirmation != "DIMENTICA":
+        raise HTTPException(status_code=400, detail="Type DIMENTICA to confirm")
+    try:
+        result = forget_albums(release_ids, token, mode)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    target = "/analyses" if result["queued"] else "/releases"
+    return RedirectResponse(f"{target}?forgotten={result['forgotten']}&requeued={result['queued']}", status_code=303)

@@ -1,10 +1,17 @@
 # SonicSentry roadmap
 
+## Delivered in 0.4.2
+
+- Previewed single/bulk analysis forgetting with explicit confirmation, retaining physical files
+- Atomic forget-and-rescan with source routing policy and active/recoverable-work protection
+- Scoped duplicate/observation cleanup and stale reconciliation proposal removal
+
 ## Delivered in 0.4.1
 
 - Explicit destination media GID, 0664 files and setgid 2775 directories
 - Source modes/ACLs no longer cloned; destination ACL group access is verified
 - Linux regression with separate SonicSentry/Picard UIDs and restrictive sources
+- Administrator history reset with metadata backup, activity guards and preserved media/config/accounts
 
 ## Delivered in 0.4
 
@@ -35,9 +42,9 @@
 
 - Scheduled/resumable library scans and per-source quality policies
 - Audio-level duplicate comparisons across tags and encodings
-- Edition comparison and side-by-side forensic explanations
+- Comparisons across album editions and clearer guidance on uncertain forensic evidence
 - Exportable release/batch summaries and searchable global audit history
-- Picard hand-off status and post-tagging reconciliation
+- Explicit Picard hand-off tracking, building on existing post-tagging path reconciliation
 - Guided account administration and optional trusted-proxy/SSO support
 - Multi-architecture images and richer operational metrics
 

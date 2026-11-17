@@ -4,6 +4,28 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Forget analysis": "Dimentica analisi",
+    "Forget only": "Dimentica soltanto",
+    "Forget and rescan": "Dimentica e rianalizza",
+    "albums ready": "album pronti",
+    "Ready to forget": "Pronto",
+    "Skipped": "Escluso",
+    "Type DIMENTICA to confirm": "Scrivi DIMENTICA per confermare",
+    "Confirm for eligible albums": "Conferma per gli album pronti",
+    "Analysis management": "Gestione analisi",
+    "Forget this result while keeping files in their current location, optionally queuing a fresh analysis.": "Dimentica questo risultato conservando i file nella posizione attuale, con la possibilità di accodare una nuova analisi.",
+    "Remove analysis results, review decisions, related history and duplicate references for eligible albums. Audio, reports and uploads stay on disk in their current locations.": "Rimuovi risultati, revisioni, storico associato e riferimenti per i duplicati degli album pronti. Audio, report e caricamenti restano sul disco nella posizione attuale.",
+    "Folder watching stays enabled: monitored albums may be acquired again after the stability wait. Choose rescan to queue them immediately.": "Il monitoraggio resta attivo: gli album monitorati possono essere acquisiti di nuovo dopo l’attesa di stabilità. Scegli la rianalisi per accodarli subito.",
+    "This permanently removes the selected database history. Download a metadata backup from Maintenance first if needed.": "Lo storico selezionato viene rimosso definitivamente dal database. Se necessario, scarica prima un backup dei metadati dalla Manutenzione.",
+    "Albums forgotten; files kept in place.": "Album dimenticati; file conservati nella posizione attuale.",
+    "Analyses queued": "Analisi accodate",
+    "Release not found": "Album non trovato",
+    "Album has queued or running analyses": "L’album ha analisi in attesa o in corso",
+    "Restore or explicitly purge recoverable trash before forgetting its analysis": "Ripristina o elimina esplicitamente gli elementi nel cestino prima di dimenticarne l’analisi",
+    "Current album path is not an authorized analysis source": "Il percorso attuale non è una sorgente autorizzata per l’analisi",
+    "Current folder contains no accessible FLAC files": "La cartella attuale non contiene file FLAC accessibili",
+    "Selected album paths overlap; analyze them separately": "I percorsi selezionati si sovrappongono: analizzali separatamente",
+
     "Reset analysis history": "Azzera analisi e storico",
     "Remove indexed albums, tracks, reviews, analysis queues and operation history from the database. Audio, reports and uploads on disk are not deleted.": "Rimuovi dal database gli album indicizzati, le tracce, le revisioni, le code di analisi e lo storico delle operazioni. Audio, report e caricamenti sul disco non vengono eliminati.",
     "Configuration, sources and accounts are kept. Folder watching is disabled so old content is not immediately queued again. Pending analyses and file tasks are removed.": "Configurazione, sorgenti e account vengono conservati. Il monitoraggio viene disattivato per evitare che i vecchi contenuti siano accodati subito di nuovo. Le analisi e le operazioni in attesa vengono rimosse.",

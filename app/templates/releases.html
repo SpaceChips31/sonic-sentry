@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ _('Releases') }} · {{ app_name }}{% endblock %}
 {% block content %}
+{% if request.query_params.get('forgotten','').isdigit() %}<div class="panel settings-panel" role="status">{{ _('Albums forgotten; files kept in place.') }} {{ request.query_params.get('forgotten') }}{% if request.query_params.get('requeued','0') != '0' %} · {{ _('Analyses queued') }}: {{ request.query_params.get('requeued') }}{% endif %}</div>{% endif %}
 <section class="page-heading"><div><p class="eyebrow">{{ _('Library history') }}</p><h1>{{ _('Releases') }}</h1><p>{{ total }} {{ _('total') }}</p></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
 <form class="release-filter panel" method="get">
   <label>{{ _('Search releases') }}<input type="search" name="q" value="{{ query }}"></label>
@@ -9,7 +10,7 @@
   <button class="button secondary" type="submit">{{ _('Filter') }}</button>
 </form>
 <form method="post" action="/releases/review">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}>
-<div class="bulk-actions"><label>{{ _('Selected albums') }}<select name="decision"><option value="approve">{{ _('Approve') }}</option><option value="reject">{{ _('Reject') }}</option><option value="reset">{{ _('Reset') }}</option></select></label><label>{{ _('Review note') }}<input name="note" maxlength="2000"></label><button class="button secondary" id="bulk-submit" disabled type="submit">{{ _('Apply review') }}</button><small>{{ _('Changes review decisions only. Use the album workflow to move files.') }}</small></div>
+<div class="bulk-actions"><label>{{ _('Selected albums') }}<select name="decision"><option value="approve">{{ _('Approve') }}</option><option value="reject">{{ _('Reject') }}</option><option value="reset">{{ _('Reset') }}</option></select></label><label>{{ _('Review note') }}<input name="note" maxlength="2000"></label><button class="button secondary" id="bulk-submit" disabled type="submit">{{ _('Apply review') }}</button><button class="button secondary" id="bulk-forget" disabled type="submit" formaction="/releases/forget/preview">{{ _('Forget analysis') }}</button><small>{{ _('Changes review decisions only. Use the album workflow to move files.') }}</small></div>
 <section class="panel table-scroll">
 {% if releases %}<table><thead><tr><th><input type="checkbox" id="select-all" aria-label="{{ _('Select all albums') }}"></th><th>{{ _('Release') }}</th><th>{{ _('Tracks') }}</th><th>{{ _('Final status') }}</th></tr></thead><tbody>
 {% for release in releases %}<tr><td><input type="checkbox" name="release_ids" value="{{ release.id }}" aria-label="{{ release.title }}"></td><td><a href="/releases/{{ release.id }}">{{ release.title }}</a><small class="album-path">{{ release.source_path }}</small></td><td>{{ release.total_tracks }}</td><td><span class="badge {{ release.status|lower }}">{{ release.status|human_status }}</span></td></tr>{% endfor %}
@@ -21,6 +22,7 @@ const all = document.getElementById('select-all'), boxes = [...document.querySel
 function updateSelection() {
   const count = boxes.filter(input => input.checked).length;
   document.getElementById('bulk-submit').disabled = count === 0;
+  document.getElementById('bulk-forget').disabled = count === 0;
   if (all) { all.checked = count > 0 && count === boxes.length; all.indeterminate = count > 0 && count < boxes.length; }
 }
 all?.addEventListener('change', event => { boxes.forEach(input => {input.checked = event.target.checked;}); updateSelection(); });
