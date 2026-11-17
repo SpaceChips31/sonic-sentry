@@ -707,3 +707,22 @@ progress {display:block;width:100%;max-width:300px;height:16px;}
 .operation-table td a {overflow-wrap:anywhere;}
 .comparison-selectors label {display:grid;gap:6px;min-width:220px;margin-bottom:12px;}
 .comparison-selectors select {padding:8px;background:var(--bg,#22272b);color:var(--text,#e6e8ea);border:1px solid #555;}
+
+/* Results: plain-language guidance before the optional forensic detail. */
+.result-guide { padding: 1.5rem; border-left: 4px solid var(--warning, #d8a64a); }
+.result-guide.pass { border-left-color: var(--success, #60b483); }
+.result-guide.rejected { border-left-color: var(--danger, #dd7777); }
+.result-guide h2 { margin-top: .4rem; }
+.result-counts, .review-navigation, .review-buttons { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; margin: 1rem 0; }
+.result-counts span { padding: .4rem .65rem; background: rgba(128,128,128,.12); border-radius: .3rem; }
+.result-review { margin-top: 1.25rem; }
+.result-review label { display: block; margin-bottom: .75rem; }
+.result-review input, .result-review textarea { display: block; width: 100%; max-width: 44rem; margin-top: .35rem; }
+.result-review small, .track-reason { display: block; margin-top: .5rem; line-height: 1.5; }
+.track-reason { max-width: 48rem; }
+.result-details { padding: 1.25rem; }
+.result-details > summary { cursor: pointer; font-weight: 650; padding: .3rem 0; }
+.result-details[open] > summary { margin-bottom: 1rem; }
+.result-details .stats { margin-top: 1rem; }
+.result-footnote { font-size: .9rem; }
+@media(max-width: 600px) { .result-guide { padding: 1rem; } .review-buttons .button { flex: 1 1 auto; } }

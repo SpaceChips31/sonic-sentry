@@ -247,3 +247,10 @@ def release_file_action(
         f"/releases/{release_id}",
         status_code=303,
     )
+
+
+@router.post("/releases/{release_id}/review")
+def review_album(request: Request, release_id: int, decision: str = Form(...), note: str = Form("", max_length=2000)):
+    # Reuse the same guarded transaction and review audit as bulk review.
+    bulk_review(request, [release_id], decision, note)
+    return RedirectResponse(f"/releases/{release_id}", status_code=303)
