@@ -101,3 +101,18 @@ def test_viewer_cannot_use_album_review(setup,monkeypatch):
     with TestClient(main.app) as client:
         client.post('/login',data={'username':'viewer','password':'a-test-password-123'})
         assert client.post(f'/releases/{release.id}/review',data={'decision':'approve'}).status_code==403
+
+
+def test_approve_pending_preserves_existing_rejection_and_notes(setup):
+    release=importer.import_report(report(setup,'QUARANTINE'))
+    with setup.db() as session:
+        existing=session.scalar(select(Track));existing.human_review='REJECTED';existing_id=existing.id
+        session.add(Track(release_id=release.id,path=release.source_path+'/new.flac',display_path='new.flac',status='QUARANTINE',integrity_ok=1))
+        session.commit()
+    with TestClient(main.app) as client:
+        assert client.post(f'/releases/{release.id}/review',data={'decision':'approve','note':'New decision'},follow_redirects=False).status_code==303
+    with setup.db() as session:
+        assert session.get(Track,existing_id).human_review=='REJECTED'
+        assert session.get(Release,release.id).status=='REJECTED'
+        events=list(session.scalars(select(ReviewEvent)))
+        assert len(events)==1 and events[0].track_path=='new.flac'
