@@ -54,7 +54,7 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.4.2`), the minor release
+Available release tags include the exact version (`0.4.3`), the minor release
 (`0.4`), and `latest`. Production deployments should prefer the exact
 version.
 
@@ -173,10 +173,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.4.2:
+For SonicSentry 0.4.3:
 
 ```env
-SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.2
+SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.3
 ```
 
 ## Local development
@@ -189,9 +189,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.4.2` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.4.3` runs the GitHub Actions
 publication workflow. It tests, builds and smoke-tests the image before publishing the corresponding
-`0.4.2`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
+`0.4.3`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -260,7 +260,7 @@ are consumed by Compose. Web and Worker must share identical settings and mounts
 
 | Variable | Default / purpose |
 | --- | --- |
-| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.2` |
+| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.3` |
 | `SONIC_MEDIA_GID` | Optional numeric host media group; otherwise destination-parent GID |
 | `PUID`, `PGID` | `1000`, `1000`; UID/GID for writable mounts |
 | `LOSSLESS_VALIDATOR_PORT` | `8090`; host Web port |
@@ -501,3 +501,21 @@ again after the stability wait, including when choosing Forget only. Pause the
 source watcher first if that is not desired. This differs from the administrator's
 global **Reset analysis history**, which clears the entire analysis library and
 disables watchers. Neither operation moves an album back to its original folder.
+
+
+## Reading results (0.4.3)
+
+Album results now start with a plain-language summary and the next action.
+Integrity failures, automatically rejected tracks and pending review decisions
+appear first. An album-level **Approve pending tracks** action records review
+only; it does not move files or override integrity failures/automatic rejection.
+The existing file actions are shown separately with the current album path.
+
+Track results explain the primary evidence and distinguish the automatic result
+from the human decision. Approve/reject/reset share one optional review note;
+**Next track awaiting review** helps work through the album. Technical scores,
+full evidence, spectrograms and history remain available in expandable sections,
+and the existing side-by-side comparison remains available on the album.
+Scores are indicators, not a probability of lossy origin; a frequency cutoff
+alone does not establish lossy provenance. Analysis thresholds and routing
+policies are unchanged.

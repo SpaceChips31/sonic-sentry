@@ -1,5 +1,11 @@
 # SonicSentry roadmap
 
+## Delivered in 0.4.3
+
+- Plain-language result summaries, evidence explanations and recommended next actions
+- Problem-first track order, direct album review and next-pending-track navigation
+- Separate review/file actions, expandable technical detail, spectrogram and history
+
 ## Delivered in 0.4.2
 
 - Previewed single/bulk analysis forgetting with explicit confirmation, retaining physical files

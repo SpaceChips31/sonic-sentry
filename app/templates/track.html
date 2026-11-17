@@ -5,8 +5,14 @@
 <a class="back" href="/releases/{{ track.release.id }}">← {{ track.release.title }}</a>
 <section class="release-header status-accent {{ track.status|verdict_tone }}">
   <div><p class="eyebrow">{{ _('Forensic review') }}</p><h1 class="track-title">{{ track.display_path }}</h1><p class="source-path">{{ track.path }}</p></div>
-  <span class="badge large {{ track.status|lower }}">{{ track.status|human_status }}</span>
+  <span class="badge large {{ guidance.tone }}">{% if track.status == 'QUARANTINE' and track.integrity_ok and track.human_review != 'NONE' %}{{ track.human_review|human_review }}{% else %}{{ track.status|human_status }}{% endif %}</span>
 </section>
+<section class="panel result-guide {{ guidance.tone }}"><p class="eyebrow">{{ _('What this result means') }}</p><h2>{{ _(guidance.title) }}</h2><p>{{ _(guidance.explanation) }}</p><p><strong>{{ _('What to do next') }}</strong> {{ _(guidance.action) }}</p>
+<p class="result-footnote">{{ _('Automatic result') }}: {{ track.forensic_verdict|human_verdict }} · {{ _('Your decision') }}: {{ track.human_review|human_review }}</p>
+{% if track.status == 'QUARANTINE' and track.integrity_ok %}<form class="result-review" method="post" action="/tracks/{{ track.id }}/review/approve">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><label>{{ _('Review note') }}<textarea name="note" maxlength="2000" rows="2"></textarea></label><div class="review-buttons"><button class="button success" type="submit">{{ _('Approve this track') }}</button><button class="button danger" type="submit" formaction="/tracks/{{ track.id }}/review/reject">{{ _('Reject this track') }}</button>{% if track.human_review != 'NONE' %}<button class="button secondary" type="submit" formaction="/tracks/{{ track.id }}/review/reset">{{ _('Reset review') }}</button>{% endif %}</div><small>{{ _('Records your review only. Files stay in their current location.') }}</small></fieldset></form>{% endif %}
+<div class="review-navigation">{% if next_review %}<a class="button secondary" href="/tracks/{{ next_review }}">{{ _('Next track awaiting review') }} →</a>{% endif %}<a href="/releases/{{ track.release.id }}">{{ _('Back to album result') }}</a></div>
+</section>
+<details class="panel result-details"><summary>{{ _('Technical details and evidence') }}</summary><p>{{ _('Scores describe analysis indicators; they are not a probability that the recording is lossy.') }}</p>
 <section class="stats">
   <article class="stat"><span>{{ _('Integrity') }} {{ help(_('Integrity help')) }}</span><strong class="{{ 'text-pass' if track.integrity_ok else 'text-rejected' }}">{{ "PASS" if track.integrity_ok else "FAILED" }}</strong></article>
   <article class="stat verdict-card {{ track.forensic_verdict|verdict_tone }}"><span>{{ _('Forensic verdict') }} {{ help(_('Forensic verdict help')) }}</span><strong>{{ track.forensic_verdict|human_verdict }}</strong></article>
@@ -27,14 +33,8 @@
   </article>
 </section>
 <section class="panel detail-card evidence-section"><h2>{{ _('Natural lossless indicators') }}</h2><ul class="evidence natural">{% for item in spectral.get("natural_evidence", []) %}<li>{{ item|evidence_text }}</li>{% else %}<li>{{ _('No natural indicators recorded.') }}</li>{% endfor %}</ul></section>
-<section class="panel detail-card"><h2>{{ _('Spectrogram') }}</h2>
+</details><details class="panel result-details"><summary>{{ _('Spectrogram') }}</summary>
 {% if has_spectrogram %}<a href="/tracks/{{ track.id }}/spectrogram" target="_blank" rel="noopener"><img class="spectrogram" src="/tracks/{{ track.id }}/spectrogram" alt="{{ _('Spectrogram of this track') }}" loading="lazy"></a>
 {% else %}<p>{{ _('No managed spectrogram is available. Run a new analysis to generate it.') }}</p>{% endif %}
-</section>
-{% if track.status == "QUARANTINE" %}
-<section class="review-box"><div><p class="eyebrow">{{ _('Human review') }}</p><h2>{{ track.human_review|human_review }}</h2><p>{{ _('Automatic verdict unchanged') }}</p></div>
-<div class="review-actions"><form method="post" action="/tracks/{{ track.id }}/review/reject">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><label>{{ _('Review note') }}<textarea name="note" maxlength="2000" rows="2"></textarea></label><button class="button danger" type="submit">{{ _('Reject') }}</button></fieldset></form>
-{% if track.human_review != "NONE" %}<form method="post" action="/tracks/{{ track.id }}/review/reset">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><button class="button secondary" type="submit">{{ _('Reset') }}</button></fieldset></form>{% endif %}
-<form method="post" action="/tracks/{{ track.id }}/review/approve">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}><label>{{ _('Review note') }}<textarea name="note" maxlength="2000" rows="2"></textarea></label><button class="button success" type="submit">{{ _('Approve') }}</button></fieldset></form></div></section>
-{% endif %}
+</details>
 {% endblock %}

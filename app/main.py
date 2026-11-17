@@ -1,5 +1,6 @@
 import json
 from collections import Counter
+from app.services.result_guidance import album_guidance, track_guidance, needs_review
 from app.services.review_reasons import REASONS
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -626,7 +627,7 @@ def release_detail(request: Request, release_id: int):
         return templates.TemplateResponse(
             request=request,
             name="release.html",
-            context={"reason_summary":Counter(track.review_reason or "uncertain" for track in release.tracks),
+            context={"guidance":album_guidance(release),"track_guidance":track_guidance,"reason_summary":Counter(track.review_reason or "uncertain" for track in release.tracks),
                      "reason_labels":REASONS,
                      "release": release, "file_operations_enabled": workflow_settings()["enabled"],
                      "reviews": list(session.scalars(select(ReviewEvent).where(ReviewEvent.release_id == release.id).order_by(ReviewEvent.id.desc()).limit(100))),
@@ -642,7 +643,7 @@ def track_detail(request: Request, track_id: int):
         track = session.scalar(
             select(Track)
             .where(Track.id == track_id)
-            .options(selectinload(Track.release))
+            .options(selectinload(Track.release).selectinload(Release.tracks))
         )
 
         if track is None:
@@ -657,6 +658,8 @@ def track_detail(request: Request, track_id: int):
             name="track.html",
             context={
                 "track": track,
+                "guidance": track_guidance(track),
+                "next_review": next((t.id for t in track.release.tracks if t.id != track.id and needs_review(t)), None),
                 "spectral": spectral,
                 "has_spectrogram": managed_spectrogram(forensics) is not None,
             },

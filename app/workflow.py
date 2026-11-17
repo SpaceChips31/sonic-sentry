@@ -101,8 +101,7 @@ def cancel_analysis(job_id: int):
     return RedirectResponse("/analyses", status_code=303)
 
 
-@router.post("/releases/review")
-def bulk_review(request: Request, release_ids: list[int] = Form(...), decision: str = Form(...), note: str = Form("", max_length=2000)):
+def _review_releases(request, release_ids, decision, note, *, pending_only=False):
     choices = {"approve": "APPROVED", "reject": "REJECTED", "reset": "NONE"}
     if decision not in choices or not release_ids or len(release_ids) > 50:
         raise HTTPException(status_code=400, detail="Select up to 50 albums and a valid decision")
@@ -118,13 +117,18 @@ def bulk_review(request: Request, release_ids: list[int] = Form(...), decision: 
                 if decision == "approve" and any(not track.integrity_ok for track in release.tracks):
                     raise FileOperationError("an album with integrity failures cannot be approved")
                 for track in release.tracks:
-                    if track.status == "QUARANTINE":
+                    if track.status == "QUARANTINE" and (not pending_only or track.human_review == "NONE"):
                         from app.services.reviews import set_review
                         set_review(session, track, choices[decision], note, getattr(request.state, "actor", "local"))
                 recalculate_release_status(release)
             session.commit()
     except FileOperationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/releases/review")
+def bulk_review(request: Request, release_ids: list[int] = Form(...), decision: str = Form(...), note: str = Form("", max_length=2000)):
+    _review_releases(request, release_ids, decision, note)
     return RedirectResponse("/releases", status_code=303)
 
 
@@ -247,3 +251,12 @@ def release_file_action(
         f"/releases/{release_id}",
         status_code=303,
     )
+
+
+@router.post("/releases/{release_id}/review")
+def review_album(request: Request, release_id: int, decision: str = Form(...), note: str = Form("", max_length=2000)):
+    # Reuse the same guarded transaction and review audit as bulk review.
+    if decision != "approve":
+        raise HTTPException(status_code=400, detail="This action only approves pending tracks")
+    _review_releases(request, [release_id], decision, note, pending_only=True)
+    return RedirectResponse(f"/releases/{release_id}", status_code=303)
