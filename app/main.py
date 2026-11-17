@@ -24,7 +24,7 @@ from app.services.queue import enqueue_paths
 from app.services.files import contains_flac
 from app.services.file_workflow import check_pending_transfer, check_active_jobs, lock_file_operations, FileOperationError
 from app.models import AnalysisJob, AnalysisSource, Release, Track, ReleaseOperation, FileTransfer, TrashEntry, ReviewEvent, FileTask, ReconcileScan
-from app.services.verdicts import recalculate_release_status
+from app.services.verdicts import recalculate_release_status, effective_track_status_sql
 from app.services.settings import workflow_settings
 from app.services.batch import BatchDiscoveryError, discover_releases
 from app.services.importer import import_report
@@ -137,6 +137,7 @@ def dashboard(request: Request):
             "rejected": sum(r.status == "REJECTED" for r in releases),
         }
 
+        effective_status = effective_track_status_sql()
         track_row = session.execute(
             select(
                 func.count(Track.id),
@@ -146,8 +147,7 @@ def dashboard(request: Request):
                 func.sum(
                     case(
                         (
-                            (Track.status == "QUARANTINE")
-                            & (Track.human_review == "NONE"),
+                            (effective_status == "QUARANTINE"),
                             1,
                         ),
                         else_=0,
@@ -159,6 +159,10 @@ def dashboard(request: Request):
                 func.sum(
                     case((Track.human_review == "REJECTED", 1), else_=0)
                 ),
+                func.sum(case((Track.integrity_ok == 0, 1), else_=0)),
+                func.sum(case((effective_status == "PASS", 1), else_=0)),
+                func.sum(case((effective_status == "REJECTED", 1), else_=0)),
+                func.sum(case(((effective_status == "PASS") & (Track.status == "PASS"), 1), else_=0)),
             )
         ).one()
 
@@ -170,6 +174,10 @@ def dashboard(request: Request):
             "pending_review": int(track_row[4] or 0),
             "approved": int(track_row[5] or 0),
             "human_rejected": int(track_row[6] or 0),
+            "integrity_failures": int(track_row[7] or 0),
+            "accepted": int(track_row[8] or 0),
+            "current_rejected": int(track_row[9] or 0),
+            "accepted_automatic": int(track_row[10] or 0),
         }
 
         job_counters = {
@@ -191,6 +199,9 @@ def dashboard(request: Request):
             if track_counters["total"]
             else 0
         )
+
+        track_counters["accepted_manual"] = track_counters["accepted"] - track_counters["accepted_automatic"]
+        track_counters["accepted_pct"] = round(track_counters["accepted"] / track_counters["total"] * 100, 1) if track_counters["total"] else 0
 
         attention_releases = [
             release for release in releases

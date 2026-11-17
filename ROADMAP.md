@@ -1,5 +1,11 @@
 # SonicSentry roadmap
 
+## Delivered in 0.4.4
+
+- Dashboard current decisions include manual approvals, with original automatic results expandable
+- Correct integrity-failure metric and shared track/album decision rules
+- Review-history navigation includes already approved albums
+
 ## Delivered in 0.4.3
 
 - Plain-language result summaries, evidence explanations and recommended next actions

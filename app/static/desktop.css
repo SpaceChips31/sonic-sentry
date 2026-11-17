@@ -726,3 +726,8 @@ progress {display:block;width:100%;max-width:300px;height:16px;}
 .result-details .stats { margin-top: 1rem; }
 .result-footnote { font-size: .9rem; }
 @media(max-width: 600px) { .result-guide { padding: 1rem; } .review-buttons .button { flex: 1 1 auto; } }
+
+.dashboard-explanation { color: var(--muted); font-size: .9rem; line-height: 1.5; margin: .75rem 0 0; }
+.automatic-results { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+.automatic-results summary { cursor: pointer; font-weight: 600; }
+.automatic-results p { color: var(--muted); font-size: .9rem; }

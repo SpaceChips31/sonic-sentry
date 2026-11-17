@@ -4,6 +4,19 @@ from starlette.requests import Request
 
 
 ITALIAN = {
+    "Accepted tracks": "Tracce accettate",
+    "including manual approvals": "incluse le approvazioni manuali",
+    "albums awaiting a decision": "album in attesa di una decisione",
+    "Current decisions": "Decisioni attuali",
+    "Track status after review": "Stato delle tracce dopo le revisioni",
+    "Accepted": "Accettate",
+    "accepted automatically": "accettate automaticamente",
+    "accepted by manual review": "accettate dopo revisione manuale",
+    "These are analysis decisions, not the physical location of the files.": "Questi conteggi indicano le decisioni sulle analisi, non la posizione fisica dei file.",
+    "Original automatic results": "Risultati automatici originali",
+    "These results are kept unchanged after manual review.": "Questi risultati vengono conservati anche dopo la revisione manuale.",
+    "Flagged for review": "Segnalate da verificare",
+
     "What this result means": "Cosa significa questo risultato",
     "What to do next": "Come procedere",
     "Damaged or unreadable file": "File danneggiato o non leggibile",
