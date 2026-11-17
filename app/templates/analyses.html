@@ -12,6 +12,7 @@
 {% endmacro %}
 {% block title %}{{ _('Analysis queue') }} · {{ app_name }}{% endblock %}
 {% block content %}
+{% if request.query_params.get('forgotten','').isdigit() %}<div class="panel settings-panel" role="status">{{ _('Albums forgotten; files kept in place.') }} {{ request.query_params.get('forgotten') }}{% if request.query_params.get('requeued','0') != '0' %} · {{ _('Analyses queued') }}: {{ request.query_params.get('requeued') }}{% endif %}</div>{% endif %}
 <section class="page-heading"><div><p class="eyebrow">{{ _('Pipeline') }}</p><h1>{{ _('Analysis queue') }}</h1><p>{{ _('Cancellation stops analysis before file routing. Transfers finish safely once started.') }}</p></div><a class="button success" href="/analyses/new">{{ _('New analysis') }}</a></section>
 {% if has_active_jobs %}<div class="queue-live" role="status"><span class="live-dot"></span>{{ _('Live updates active · refreshing every 3 seconds') }}</div>{% endif %}
 <div class="queue-groups">

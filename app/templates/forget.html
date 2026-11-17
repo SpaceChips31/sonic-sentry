@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Forget analysis') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<a class="back" href="/releases">← {{ _('Releases') }}</a>
+<section class="page-heading"><div><h1>{{ _('Forget analysis') }}</h1><p>{{ plan.eligible }} / {{ plan.selected }} {{ _('albums ready') }}</p></div></section>
+<section class="panel settings-panel">
+<p>{{ _('Remove analysis results, review decisions, related history and duplicate references for eligible albums. Audio, reports and uploads stay on disk in their current locations.') }}</p>
+<p>{{ _('Folder watching stays enabled: monitored albums may be acquired again after the stability wait. Choose rescan to queue them immediately.') }}</p>
+<p>{{ _('This permanently removes the selected database history. Download a metadata backup from Maintenance first if needed.') }}</p>
+</section>
+<section class="panel table-scroll"><table><thead><tr><th>{{ _('Release') }}</th><th>{{ _('Status') }}</th></tr></thead><tbody>
+{% for row in plan.rows %}<tr><td>{{ row.title }}<small class="album-path">{{ row.path }}</small>{% if row.eligible %}<small>{{ row.tracks }} {{ _('Tracks') }} · {{ row.jobs }} {{ _('Analyses') }}</small>{% endif %}</td><td>{% if row.eligible %}{{ _('Ready to forget') }}{% if row.rescan_error %}<small>{{ _(row.rescan_error) }}</small>{% endif %}{% else %}<strong>{{ _('Skipped') }}</strong><p>{{ _(row.error) }}</p>{% endif %}</td></tr>{% endfor %}
+</tbody></table></section>
+{% if plan.eligible %}<form class="panel settings-panel" method="post" action="/releases/forget">{{ csrf_input() }}<fieldset class="permission-fields" {% if not can_operate() %}disabled{% endif %}>
+{% for id in ids %}<input type="hidden" name="release_ids" value="{{ id }}">{% endfor %}<input type="hidden" name="token" value="{{ plan.token }}">
+<label>{{ _('Action') }}<select name="mode"><option value="forget">{{ _('Forget only') }}</option><option value="rescan" {% if not plan.can_rescan %}disabled{% endif %}>{{ _('Forget and rescan') }}</option></select></label>
+<label>{{ _('Type DIMENTICA to confirm') }}<input name="confirmation" required autocomplete="off" pattern="DIMENTICA"></label>
+<button class="button danger" type="submit">{{ _('Confirm for eligible albums') }}</button>
+</fieldset></form>{% endif %}
+{% endblock %}
