@@ -1,0 +1,7 @@
+<section class="review-evidence" aria-labelledby="recorded-evidence-heading"><h3 id="recorded-evidence-heading">{{ _('What the analysis recorded for this track') }}</h3>
+{% if evidence.facts %}<dl class="evidence-facts">{% for fact in evidence.facts %}<div><dt>{{ _(fact.label) }}</dt><dd>{{ fact.value }}</dd></div>{% endfor %}</dl>{% endif %}
+{% if evidence.suspicious %}<h4>{{ _('Recorded suspicious indicators') }}</h4><ul>{% for item in evidence.suspicious %}<li>{{ item|evidence_text }}</li>{% endfor %}</ul>{% endif %}
+{% if evidence.natural %}<h4>{{ _('Recorded natural indicators') }}</h4><ul>{% for item in evidence.natural %}<li>{{ item|evidence_text }}</li>{% endfor %}</ul>{% endif %}
+{% if not evidence.available %}<p>{{ _('No detailed evidence is recorded for this track. Missing data does not establish that the audio is genuine or lossy.') }}</p>{% endif %}
+{% if evidence.suspicious or evidence.natural %}<details><summary>{{ _('Original recorded evidence text') }}</summary><ul>{% for item in evidence.suspicious + evidence.natural %}<li>{{ item }}</li>{% endfor %}</ul></details>{% endif %}
+</section>

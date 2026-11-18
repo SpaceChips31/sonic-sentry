@@ -731,3 +731,13 @@ progress {display:block;width:100%;max-width:300px;height:16px;}
 .automatic-results { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .75rem; }
 .automatic-results summary { cursor: pointer; font-weight: 600; }
 .automatic-results p { color: var(--muted); font-size: .9rem; }
+
+.review-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: 1.25rem; }
+.review-progress progress { flex: 1 1 10rem; max-width: 25rem; }
+.review-evidence, .album-context { margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid var(--border); }
+.evidence-facts { display: flex; flex-wrap: wrap; gap: .75rem 2rem; }
+.evidence-facts div { min-width: 10rem; }
+.evidence-facts dt { color: var(--muted); font-size: .9rem; }
+.evidence-facts dd { margin: .3rem 0 0; font-weight: 600; }
+.review-evidence li { margin: .4rem 0; line-height: 1.5; }
+.album-difference { display: block; margin-top: .5rem; color: var(--quarantine); }

@@ -1,5 +1,11 @@
 # SonicSentry roadmap
 
+## Delivered in 0.5.0
+
+- Guided album review with immediate saved decisions, skip/resume, progress and final summary
+- Track-specific recorded measurements and suspicious/natural evidence, with original text available
+- Descriptive cutoff context across matching audio formats, without altering verdicts or routing
+
 ## Delivered in 0.4.4
 
 - Dashboard current decisions include manual approvals, with original automatic results expandable

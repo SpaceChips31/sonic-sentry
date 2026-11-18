@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Album review summary') }} · {{ release.title }}{% endblock %}
+{% block content %}
+<a class="back" href="/releases/{{ release.id }}">← {{ release.title }}</a>
+<section class="page-heading"><div><p class="eyebrow">{{ _('Guided album review') }}</p><h1>{{ _('Album review summary') }}</h1><p>{{ release.title }}</p></div></section>
+<section class="panel result-guide {{ guidance.tone }}"><h2>{{ _(guidance.title) }}</h2><p>{{ _(guidance.action) }}</p>
+<div class="result-counts"><span>{{ progress.completed }} / {{ progress.total }} {{ _('review decisions recorded') }}</span><span>{{ progress.approved }} {{ _('Approved') }}</span><span>{{ progress.rejected }} {{ _('Rejected') }}</span><span>{{ progress.pending }} {{ _('still awaiting a decision') }}</span><span>{{ progress.blocked }} {{ _('blocked by automatic checks') }}</span></div>
+{% if progress.pending %}<p>{{ _('Pending tracks remain undecided. You can resume this review later.') }}</p><a class="button success" href="/releases/{{ release.id }}/review">{{ _('Resume guided review') }}</a>{% else %}<p>{{ _('There are no manual decisions left pending.') }}{% if progress.blocked %} {{ _('Automatic rejections and integrity failures still block acceptance.') }}{% endif %}</p>{% endif %}
+<p>{{ _('Review decisions are saved immediately. This workflow does not move files.') }}</p><a class="button secondary" href="/releases/{{ release.id }}">{{ _('Back to album result') }}</a>
+</section>
+<section class="panel table-scroll"><table><thead><tr><th>{{ _('Track') }}</th><th>{{ _('Automatic result') }}</th><th>{{ _('Your decision') }}</th></tr></thead><tbody>{% for track in guidance.tracks %}<tr><td><a href="/tracks/{{ track.id }}?guided=1">{{ track.display_path }}</a></td><td>{{ track.status|human_status }}</td><td>{{ track.human_review|human_review }}</td></tr>{% endfor %}</tbody></table></section>
+{% endblock %}
