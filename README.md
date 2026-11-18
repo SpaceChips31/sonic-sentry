@@ -54,8 +54,8 @@ Stable images are published to:
 ghcr.io/spacechips31/sonic-sentry
 ```
 
-Available release tags include the exact version (`0.4.4`), the minor release
-(`0.4`), and `latest`. Production deployments should prefer the exact
+Available release tags include the exact version (`0.5.0`), the minor release
+(`0.5`), and `latest`. Production deployments should prefer the exact
 version.
 
 For a private fork or private package, authenticate before pulling:
@@ -173,10 +173,10 @@ docker compose pull
 docker compose up -d --remove-orphans
 ```
 
-For SonicSentry 0.4.4:
+For SonicSentry 0.5.0:
 
 ```env
-SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.4.4
+SONIC_IMAGE=ghcr.io/spacechips31/sonic-sentry:0.5.0
 ```
 
 ## Local development
@@ -189,9 +189,9 @@ docker compose -f compose.yml -f compose.dev.yml up -d
 
 ## Releasing
 
-Pushing a semantic version tag such as `v0.4.4` runs the GitHub Actions
+Pushing a semantic version tag such as `v0.5.0` runs the GitHub Actions
 publication workflow. It tests, builds and smoke-tests the image before publishing the corresponding
-`0.4.4`, `0.4`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
+`0.5.0`, `0.5`, and `latest` tags to GHCR. Pushes to main/dev publish only `dev`. Release tags must not be reused.
 
 ## Exit statuses
 
@@ -260,7 +260,7 @@ are consumed by Compose. Web and Worker must share identical settings and mounts
 
 | Variable | Default / purpose |
 | --- | --- |
-| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.4.4` |
+| `SONIC_IMAGE` | `ghcr.io/spacechips31/sonic-sentry:latest`; full image including `:dev`, `:latest` or `:0.5.0` |
 | `SONIC_MEDIA_GID` | Optional numeric host media group; otherwise destination-parent GID |
 | `PUID`, `PGID` | `1000`, `1000`; UID/GID for writable mounts |
 | `LOSSLESS_VALIDATOR_PORT` | `8090`; host Web port |
@@ -535,3 +535,32 @@ never rewritten by a review. For example, 1,787 automatic passes plus 281 manual
 approved review tracks produce 2,068 accepted tracks (100%), while the original
 automatic pass rate remains 86.4%. The review-history link opens all albums,
 including approved ones. No database migration or reanalysis is needed.
+
+
+## Guided review and album context (0.5.0)
+
+Start or resume guided review from an album result. Each approve/reject decision
+and optional note is saved through the existing guarded, audited review workflow,
+then the next pending track opens. Skip for now leaves the track undecided; if it
+is the last pending track, the summary offers resume. Opening the summary or
+leaving the page does not approve or reject anything. Existing review decisions
+are durable checkpoints; no additional queue, schema migration or file movement
+is involved. Resetting a decision returns to that track. Automatic rejections
+and integrity failures remain blockers and are listed in the summary.
+
+Each track shows recorded suspicious/natural indicators and validated cutoff,
+segment and codec measurements where available. Original evidence text remains
+expandable. Missing or malformed reports produce an unavailable-data message,
+not a genuine/lossy inference. No per-indicator numerical weights are invented.
+
+Album context compares recorded cutoffs only for intact tracks with matching
+sample rate, channels and bit-depth description. At least three measured tracks
+are required. A common reference is the group median, with a strict majority
+(at least two tracks) within max(1 kHz, 10%) of that reference. A difference is
+highlighted only at max(2 kHz, 15%). Mixed groups and missing measurements are
+reported explicitly. These presentation thresholds do not change the forensic
+engine, automatic verdicts, manual decisions or routing. Similar cutoffs do not
+prove a shared source; higher cutoffs do not establish better quality.
+
+This release does not add duplicate detection, cross-edition comparison or
+Picard integrations.

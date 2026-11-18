@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from app.services.result_guidance import album_guidance, track_guidance, needs_review
+from app.services.review_assistant import analysis_data, evidence_for, review_progress, next_pending, album_comparison
 from app.services.review_reasons import REASONS
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -638,7 +639,7 @@ def release_detail(request: Request, release_id: int):
         return templates.TemplateResponse(
             request=request,
             name="release.html",
-            context={"guidance":album_guidance(release),"track_guidance":track_guidance,"reason_summary":Counter(track.review_reason or "uncertain" for track in release.tracks),
+            context={"review_progress":review_progress(release),"comparisons":album_comparison(release.tracks),"guidance":album_guidance(release),"track_guidance":track_guidance,"reason_summary":Counter(track.review_reason or "uncertain" for track in release.tracks),
                      "reason_labels":REASONS,
                      "release": release, "file_operations_enabled": workflow_settings()["enabled"],
                      "reviews": list(session.scalars(select(ReviewEvent).where(ReviewEvent.release_id == release.id).order_by(ReviewEvent.id.desc()).limit(100))),
@@ -649,7 +650,7 @@ def release_detail(request: Request, release_id: int):
 
 
 @app.get("/tracks/{track_id}", response_class=HTMLResponse)
-def track_detail(request: Request, track_id: int):
+def track_detail(request: Request, track_id: int, guided: bool = False):
     with SessionLocal() as session:
         track = session.scalar(
             select(Track)
@@ -660,9 +661,8 @@ def track_detail(request: Request, track_id: int):
         if track is None:
             raise HTTPException(status_code=404, detail="Track not found")
 
-        forensics = json.loads(track.forensic_json or "{}")
-        result = forensics.get("result", {})
-        spectral = result.get("authenticity", {}).get("spectral", {})
+        data = analysis_data(track)
+        forensics, spectral = data["raw"], data["spectral"]
 
         return templates.TemplateResponse(
             request=request,
@@ -670,6 +670,9 @@ def track_detail(request: Request, track_id: int):
             context={
                 "track": track,
                 "guidance": track_guidance(track),
+                "evidence":evidence_for(track),
+                "comparison":album_comparison(track.release.tracks)[track.id],
+                "review_flow":review_progress(track.release) if guided else None,
                 "next_review": next((t.id for t in track.release.tracks if t.id != track.id and needs_review(t)), None),
                 "spectral": spectral,
                 "has_spectrogram": managed_spectrogram(forensics) is not None,
@@ -678,7 +681,8 @@ def track_detail(request: Request, track_id: int):
 
 
 def managed_spectrogram(forensics: dict) -> Path | None:
-    value = forensics.get("result", {}).get("spectrogram_path")
+    result = forensics.get("result")
+    value = result.get("spectrogram_path") if isinstance(result,dict) else None
     if not isinstance(value, str) or not value:
         return None
     path = Path(value).resolve()
@@ -691,7 +695,7 @@ def managed_spectrogram(forensics: dict) -> Path | None:
 def track_spectrogram(track_id: int):
     with SessionLocal() as session:
         track = session.get(Track, track_id)
-        path = managed_spectrogram(json.loads(track.forensic_json or "{}")) if track else None
+        path = managed_spectrogram(analysis_data(track)["raw"]) if track else None
     if path is None:
         raise HTTPException(status_code=404, detail="Spectrogram not found in managed report storage")
     with path.open("rb") as stream:
@@ -701,7 +705,7 @@ def track_spectrogram(track_id: int):
 
 
 @app.post("/tracks/{track_id}/review/{decision}")
-def review_track(request: Request, track_id: int, decision: str, note: str = Form("", max_length=2000)):
+def review_track(request: Request, track_id: int, decision: str, note: str = Form("", max_length=2000), continue_review: bool = Form(False)):
     decisions = {
         "approve": "APPROVED",
         "reject": "REJECTED",
@@ -725,6 +729,8 @@ def review_track(request: Request, track_id: int, decision: str, note: str = For
         if track is None:
             raise HTTPException(status_code=404, detail="Track not found")
 
+        if decision == "approve" and not track.integrity_ok:
+            raise HTTPException(status_code=409, detail="A track with integrity failures cannot be approved")
         if track.status != "QUARANTINE":
             raise HTTPException(
                 status_code=409,
@@ -741,10 +747,10 @@ def review_track(request: Request, track_id: int, decision: str, note: str = For
         recalculate_release_status(track.release)
         session.commit()
 
-        return RedirectResponse(
-            f"/tracks/{track.id}",
-            status_code=303,
-        )
+        if continue_review:
+            target = f"/tracks/{track.id}?guided=1" if decision == "reset" else f"/releases/{track.release_id}/review?after={track.id}"
+            return RedirectResponse(target, status_code=303)
+        return RedirectResponse(f"/tracks/{track.id}", status_code=303)
 
 
 @app.get("/health")
@@ -763,3 +769,19 @@ app.include_router(operations_router)
 def worker_health():
     from app.health import worker_status
     return worker_status()
+
+
+@app.get("/releases/{release_id}/review", response_class=HTMLResponse)
+def guided_review(request: Request, release_id: int, after: int | None = None, summary: bool = False):
+    with SessionLocal() as session:
+        release = session.scalar(select(Release).where(Release.id == release_id).options(selectinload(Release.tracks)))
+        if release is None:
+            raise HTTPException(status_code=404, detail="Release not found")
+        try:
+            identifier = next_pending(release, after)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if identifier and not summary:
+            return RedirectResponse(f"/tracks/{identifier}?guided=1", status_code=303)
+        return templates.TemplateResponse(request=request,name="review_summary.html",context={
+            "release":release,"progress":review_progress(release),"guidance":album_guidance(release)})

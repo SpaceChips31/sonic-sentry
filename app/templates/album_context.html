@@ -1,0 +1,10 @@
+<section class="album-context"><h3>{{ _('Compared with this album') }}</h3>
+{% if comparison.state == 'unavailable' %}<p>{{ _('Not enough comparable measurements. At least three tracks with recorded cutoff, matching sample rate, channels and bit depth are needed.') }}</p>
+{% else %}<p><strong>{{ _('Measured frequency cutoff') }}:</strong> {{ comparison.cutoff }} Hz · {{ comparison.comparable }} {{ _('other comparable tracks') }}</p>
+{% if comparison.state == 'mixed' %}<p>{{ _('The comparable tracks do not show a clear common cutoff range.') }}</p>
+{% else %}<p><strong>{{ _('Common cutoff reference') }}:</strong> {{ comparison.baseline }} Hz</p>
+{% if comparison.state == 'lower' %}<p>{{ _('This track has a lower cutoff than the common album range. Check its source and recorded evidence.') }}</p>
+{% elif comparison.state == 'higher' %}<p>{{ _('This track has a higher cutoff than the common album range. A different cutoff does not establish better quality.') }}</p>
+{% else %}<p>{{ _('A similar cutoff is common among the comparable tracks in this album.') }}</p>{% endif %}
+{% endif %}<p class="result-footnote">{{ _('Album context is descriptive: it does not prove a shared source or change the automatic verdict or your decisions.') }}</p>{% endif %}
+</section>
